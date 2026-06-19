@@ -29,8 +29,8 @@ fly deploy -c fly.staging.toml --ha=false   # → https://test.coba.games  (test
 fly deploy --ha=false                        # → https://www.coba.games   (prod, after staging)
 ```
 `node_modules`/`dist` are intentionally not kept locally (Docker builds them in-container). The
-balance sim (`npm run sim:bench`) is now a cloud/CI concern, not a local run — a CI workflow to run
-typecheck + bench on push is a candidate follow-up if balance work resumes.
+balance sim (`npm run sim:bench`) is now a cloud/CI concern, not a local run — automated via
+GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 
 ---
 
@@ -54,8 +54,11 @@ typecheck + bench on push is a candidate follow-up if balance work resumes.
 - **Step 6 — Faction war map** is the headline feature but depends on Step 3 (persistence).
 
 **Non-blocking quality/infra follow-ups (any time):**
-- **CI workflow** (GitHub Actions): typecheck + `sim:bench` on push — replaces the removed local
-  verification and fits the cloud-only rule.
+- ✅ **CI workflow** (GitHub Actions, `.github/workflows/ci.yml`, 2026-06-19): typecheck + full
+  `sim:bench` matrix on every push/PR — the cloud verification gate replacing the removed local
+  checks. ~45s/run, green on `main`. Note: the bench prints win rates but asserts no thresholds, so
+  it's a smoke gate (engine runs every matchup without throwing) + a visible balance table in the
+  log; add threshold assertions later if balance regressions need to hard-fail.
 - **Multiplayer regression tests** — the reconnect/rematch/auto-queue integration check was a
   throwaway script; commit a real harness if multiplayer churns.
 - **Mobile/network reconnect testing** on staging (30s window unverified on real mobile).
@@ -95,7 +98,7 @@ Stood up a proper two-environment cloud setup on Fly.io, and made **cloud the on
 
 Workflow now: branch → `fly deploy -c fly.staging.toml` → test at test.coba.games → ship to www.
 
-**Follow-ups:** no CI yet (typecheck + bench now have no automated gate — see Next steps); apex →
+**Follow-ups:** CI now exists ✅ (`.github/workflows/ci.yml` — typecheck + bench gate, 2026-06-19); apex →
 www works but apex SEO canonical is fine since it 301s.
 
 ---
