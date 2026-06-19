@@ -14,11 +14,12 @@ _Last updated: 2026-06-19._
 
 | Layer | Status | Entry points |
 | --- | --- | --- |
-| Pure card engine | ✅ Validated, balanced (~47–49% mirrors) | `src/engine.ts`, `npm run sim`, `npm run sim:bench` |
-| Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts`, `npm run dev` |
+| Pure card engine | ✅ Validated, balanced (~47–49% mirrors) | `src/engine.ts`, `src/sim.ts` |
+| Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts` |
 | Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
+| Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
 | Auth + persistence | ⏸️ Deferred (intentionally) | — |
-| Hero/territory content | ⏳ 5/5 heroes ✅, 3 territories | `src/heroes.ts`, `src/territory.ts` |
+| Hero/territory content | ⏳ 5/5 heroes ✅, 3 territories (≥4 target) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
 **⛔ Testing is cloud-only — see [`CLAUDE.md`](./CLAUDE.md) + [`DEPLOY.md`](./DEPLOY.md).** Do not
@@ -33,14 +34,65 @@ typecheck + bench on push is a candidate follow-up if balance work resumes.
 
 ---
 
+## 🎯 Next steps (start here)
+
+**Finish Step 5 (current focus — 5a done, 5b/5c open):**
+1. **Playtest the 5-hero roster on staging** (https://test.coba.games). The bench bot can't judge
+   *feel* — this is the gap it can't cover. Watch the two new mechanics (Oracle buffs, Magus %
+   removal) for clarity and fun. Feed findings back into tuning.
+2. **5b — Territories:** add ≥1 more to hit the ≥4 target, AND retune **Ancient Forest** so its
+   "+1 presence" stops amplifying `allZones` cards 3× (the Conjurer ~95%-on-Forest issue). This is
+   a *territory* lever (`src/territory.ts`, pure data), deliberately deferred from the hero work.
+3. **5c — Ability variety:** mostly covered (3 ability kinds now). Optional polish, not blocking.
+
+**Then decide sequencing (Step 3 vs Step 6):**
+- **Step 3 — Auth + persistence** is the sequential next build, but **blocked on the auth-mechanism
+  decision** (open decision #3). Needs a product call before code.
+- **Step 6 — Faction war map** is the headline feature but depends on Step 3 (persistence).
+
+**Non-blocking quality/infra follow-ups (any time):**
+- **CI workflow** (GitHub Actions): typecheck + `sim:bench` on push — replaces the removed local
+  verification and fits the cloud-only rule.
+- **Multiplayer regression tests** — the reconnect/rematch/auto-queue integration check was a
+  throwaway script; commit a real harness if multiplayer churns.
+- **Mobile/network reconnect testing** on staging (30s window unverified on real mobile).
+- **Prod IPv4** — consider a dedicated address for stability (see `DEPLOY.md`).
+
+---
+
 ## Build sequence status (mirrors `ARCHITECTURE.md §5`)
 
 1. ✅ **Card resolution engine** — done, balanced.
 2. ✅ **Graphical client (human vs bot)** — done.
 3. ⏸️ **Auth + deck persistence** — *deliberately deferred* past the step-4 testing milestone. Blocked on the auth-mechanism decision (`ARCHITECTURE.md §6.3`).
-4. ✅ **Second player (Colyseus)** — shipped, and **the leftover gaps are now closed** (see below).
-5. ⏳ **Hero abilities + territory modifiers** — *current focus.* Roster is the next work. Fully enumerated below.
+4. ✅ **Second player (Colyseus)** — shipped, gaps closed, and now running on a **two-environment
+   cloud setup** (staging + prod, custom domains). See the deployment milestone below.
+5. ⏳ **Hero abilities + territory modifiers** — *current focus.* **5a roster ✅ complete (5/5);**
+   5b territories + 5c ability variety remain. Fully enumerated below.
 6. 🔲 **Faction war map** — built last, on the proven loop.
+
+---
+
+## ✅ Recently completed — Cloud environments & deploy (2026-06-19)
+
+Stood up a proper two-environment cloud setup on Fly.io, and made **cloud the only place we test**
+(standing rule — see [`CLAUDE.md`](./CLAUDE.md) + [`DEPLOY.md`](./DEPLOY.md)).
+
+- **Staging** — Fly app `coba-test`, config `fly.staging.toml`, live at **https://test.coba.games**
+  (suspends when idle for cost). Deploy: `fly deploy -c fly.staging.toml --ha=false`.
+- **Production** — Fly app `coba-246`, config `fly.toml`, live at **https://www.coba.games**.
+  Deploy: `fly deploy --ha=false`.
+- **Custom domains** — all three Let's Encrypt certs **Issued** (`test`, `www`, apex `coba.games`);
+  DNS A/AAAA records at the registrar (recorded in `DEPLOY.md`).
+- **Apex redirect** — `coba.games` 301s → `www.coba.games` (path + query preserved), an app-level
+  redirect in `server/index.ts` keyed on the apex Host. Verified live over HTTPS.
+- **Local cleanup** — `node_modules` (73M) + `dist` removed; the Docker image builds them
+  in-container, so deploys don't need them. No local dev/test going forward.
+
+Workflow now: branch → `fly deploy -c fly.staging.toml` → test at test.coba.games → ship to www.
+
+**Follow-ups:** no CI yet (typecheck + bench now have no automated gate — see Next steps); apex →
+www works but apex SEO canonical is fine since it 301s.
 
 ---
 
@@ -72,11 +124,10 @@ pairing → simulated drop → reconnect-into-seat → fresh-state delivery → 
 
 ---
 
-## ⏳ Step 5 — Hero abilities + territory modifiers (NEXT, enumerated)
+## ⏳ Step 5 — Hero abilities + territory modifiers (5a ✅ done, 5b/5c remain)
 
-Goal: expand from the 2-hero proof to the **5-archetype starter set** (`ARCHITECTURE.md §1`),
-add territory variety, and grow ability mechanics — *without* power creep (territories change
-rules, not raw power).
+Goal: the **5-archetype starter set** (`ARCHITECTURE.md §1`, ✅ complete), plus territory variety
+and ability-mechanic growth — *without* power creep (territories change rules, not raw power).
 
 ### 5a. Hero roster — ✅ 5 of 5 built (complete)
 
@@ -165,17 +216,22 @@ pass keeps matchups in ~45–55% (no archetype dominates).
 | Neutral Field | none | ✅ |
 | Volcanic Forge | spells remove +2 | ✅ |
 | Ancient Forest | units +1 presence | ✅ |
-| _more_ | rules-not-power modifiers | 🔲 enumerate during 5a |
+| _more_ | rules-not-power modifiers | 🔲 add ≥1 to hit the ≥4 target |
+| Ancient Forest (retune) | "+1 presence" amplifies `allZones` 3× | ⚠️ **retune** — Conjurer ~95% on Forest |
 
 Each new territory is a `TerritoryDef.modifyCard` in `src/territory.ts` (pure data). Design
-targets: modifiers that interact with the *new* archetypes (e.g. a board that rewards healing,
-or caps `allZones` swings) so content reinforces content. Keep them rule-shaped, never +X power
-in the abstract.
+targets: modifiers that interact with the archetypes (e.g. a board that rewards buffs, one that
+blunts board-wide swings, one that favours removal) so content reinforces content. Keep them
+rule-shaped, never +X power in the abstract. **Also retune Ancient Forest** here (its flat "+1 to
+units" triples on `allZones` cards — the Conjurer's degenerate Forest matchup; it's a territory
+lever, not a hero one).
 
-### 5c. Ability variety
-Abilities are currently 2 kinds (`addSelf`, `removeFoe`). Supporting Support/Mage means adding
-kinds (heal/buff, delayed/combo). Extend `AbilityDef.kind` in `src/types.ts` and resolution in
-`src/engine.ts`; update the client ability panel (`abilityPanel` in `main.ts`) and the bot.
+### 5c. Ability variety — mostly done
+Ability kinds grew from 2 to **3** this session: `addSelf`, `removeFoe`, and `amplify` (the
+Oracle's Rally). The Magus reused `removeFoe`. `AbilityDef.kind` lives in `src/types.ts`,
+resolution in `src/engine.ts`, the client panel in `abilityPanel` (`main.ts`), and the bot in
+`bestAbilityZone`. Adding more is optional polish, not blocking — only extend when a future hero
+needs a genuinely new effect (and remember: it must produce immediate board value for the bot).
 
 ### Step 5 exit criteria
 5 heroes playable vs bot **and** online, ≥4 territories, bot competent with every mechanic,
