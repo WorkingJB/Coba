@@ -30,10 +30,15 @@ app.get("*", (_req, res) => res.sendFile(path.join(DIST, "index.html")));
 const httpServer = createServer(app);
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });
 
-// Room-code matchmaking: both players pass { code }; filterBy routes the joiner
-// to the host's room. Host uses client.create, joiner uses client.join, so a
-// wrong code fails fast instead of silently spawning an empty room.
+// Private rooms: both players pass { code }; filterBy routes the joiner to the
+// host's room. Host uses client.create, joiner uses client.join, so a wrong
+// code fails fast instead of silently spawning an empty room.
 gameServer.define("coba", CobaRoom).filterBy(["code"]);
+
+// Public auto-queue: no code filter, so joinOrCreate fills the first open room
+// (maxClients=2) and spins up a new one only when none is waiting. Same room
+// logic — these matches simply have no shareable code.
+gameServer.define("coba_quick", CobaRoom);
 
 gameServer.listen(PORT).then(() => {
   console.log(`Coba server listening on :${PORT}`);

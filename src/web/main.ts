@@ -34,8 +34,13 @@ let territoryId = "neutral_field";
 let roomCode = "";
 let joinCodeInput = "";
 let statusMsg = "";
+let autoQueue = false; // online: hero-select is for public quick-match, not a coded room
 let oppLocked = false; // online: opponent has locked this turn
-let oppLeft = false; // online: opponent disconnected
+let oppLeft = false; // online: opponent disconnected for good
+let oppDropped = false; // online: opponent dropped, seat held for reconnect
+let reconnecting = false; // online: our own connection dropped, retrying
+let rematchVoted = false; // online: we voted to rematch
+let oppRematchVoted = false; // online: opponent voted to rematch
 
 let game: GameState | null = null;
 let rng: Rng; // bot mode only
@@ -81,6 +86,10 @@ function resetMatchUi(): void {
   pending = null;
   oppLocked = false;
   oppLeft = false;
+  oppDropped = false;
+  reconnecting = false;
+  rematchVoted = false;
+  oppRematchVoted = false;
   prevPoints = { P1: 0, P2: 0 };
   lastGain = { P1: 0, P2: 0 };
 }
@@ -111,7 +120,39 @@ const netCallbacks: net.NetCallbacks = {
   },
   onOpponentLeft: () => {
     oppLeft = true;
+    oppDropped = false;
     statusMsg = "Opponent left — match ended.";
+    render();
+  },
+  onOpponentDropped: () => {
+    oppDropped = true;
+    statusMsg = "Opponent dropped — waiting for them to reconnect…";
+    render();
+  },
+  onOpponentReturned: () => {
+    oppDropped = false;
+    statusMsg = "Opponent reconnected.";
+    render();
+  },
+  onRematchVote: (votedSeat) => {
+    if (votedSeat === seat) rematchVoted = true;
+    else oppRematchVoted = true;
+    render();
+  },
+  onConnectionLost: () => {
+    reconnecting = true;
+    statusMsg = "Connection lost — reconnecting…";
+    render();
+  },
+  onReconnected: () => {
+    reconnecting = false;
+    statusMsg = "Reconnected.";
+    render();
+  },
+  onConnectionFailed: () => {
+    reconnecting = false;
+    oppLeft = true; // reuse the match-ended path
+    statusMsg = "Lost connection to the match.";
     render();
   },
   onError: (m) => {
@@ -131,6 +172,23 @@ async function hostRoom(): Promise<void> {
     await net.createRoom(roomCode, humanHeroId, territoryId, netCallbacks);
     statusMsg = "Waiting for opponent…";
     render();
+  } catch {
+    statusMsg = "Could not reach the server. Is it running?";
+    screen = "menu";
+    render();
+  }
+}
+
+async function quickRoom(): Promise<void> {
+  mode = "online";
+  autoQueue = true;
+  roomCode = "";
+  resetMatchUi();
+  statusMsg = "Finding an opponent…";
+  screen = "lobby";
+  render();
+  try {
+    await net.quickMatch(humanHeroId, netCallbacks);
   } catch {
     statusMsg = "Could not reach the server. Is it running?";
     screen = "menu";
@@ -174,6 +232,10 @@ function applyServerState(msg: net.StateMsg): void {
   seat = msg.seat;
   pending = null;
   oppLocked = false;
+  oppDropped = false;
+  reconnecting = false;
+  rematchVoted = false;
+  oppRematchVoted = false;
   clearSelections();
   screen = "match";
   render();
@@ -182,10 +244,13 @@ function applyServerState(msg: net.StateMsg): void {
 function toMenu(): void {
   if (mode === "online") net.leave();
   mode = "bot";
+  autoQueue = false;
   game = null;
   pending = null;
   statusMsg = "";
   oppLeft = false;
+  oppDropped = false;
+  reconnecting = false;
   clearSelections();
   screen = "menu";
   render();
@@ -351,9 +416,17 @@ function renderMenu(): void {
     screen = "select";
     render();
   });
+  const quick = el("button", "btn btn-big", "Quick Match ▸");
+  quick.addEventListener("click", () => {
+    mode = "online";
+    autoQueue = true;
+    screen = "select";
+    render();
+  });
   const create = el("button", "btn btn-big", "Create Room ▸");
   create.addEventListener("click", () => {
     mode = "online";
+    autoQueue = false;
     screen = "select";
     render();
   });
@@ -365,6 +438,7 @@ function renderMenu(): void {
     render();
   });
   menu.appendChild(bot);
+  menu.appendChild(quick);
   menu.appendChild(create);
   menu.appendChild(join);
   app.appendChild(menu);
@@ -376,13 +450,17 @@ function renderMenu(): void {
 
 function renderSelect(): void {
   app.innerHTML = "";
-  const host = mode === "online";
+  const host = mode === "online" && !autoQueue; // creating a coded room
+  const quick = mode === "online" && autoQueue; // public auto-queue
+  const tagline = quick
+    ? "Quick match — pick your hero, then we'll find an opponent."
+    : host
+      ? "Create a room — pick your hero and battlefield."
+      : "Choose your hero.";
 
   const header = el("div", "header");
   header.appendChild(el("h1", undefined, "COBA"));
-  header.appendChild(
-    el("div", "tagline", host ? "Create a room — pick your hero and battlefield." : "Choose your hero."),
-  );
+  header.appendChild(el("div", "tagline", tagline));
   app.appendChild(header);
 
   const rules = el("div", "rules");
@@ -401,30 +479,37 @@ function renderSelect(): void {
   app.appendChild(heroChoiceEl());
 
   const footer = el("div", "select-footer");
-  const terr = el("label", "selector");
-  terr.appendChild(el("span", undefined, "Battlefield:"));
-  const sel = document.createElement("select");
-  for (const t of Object.keys(TERRITORIES)) {
-    const o = document.createElement("option");
-    o.value = t;
-    o.textContent = territoryDef(t).name;
-    if (t === territoryId) o.selected = true;
-    sel.appendChild(o);
-  }
-  sel.addEventListener("change", () => {
-    territoryId = sel.value;
-    render();
-  });
-  terr.appendChild(sel);
-  footer.appendChild(terr);
-  footer.appendChild(el("div", "terr-desc", territoryDef(territoryId).describe));
 
-  const start = el(
-    "button",
-    "btn btn-primary btn-big",
-    host ? `Create room as ${heroDef(humanHeroId).name} ▸` : `Start as ${heroDef(humanHeroId).name} ▶`,
-  );
-  start.addEventListener("click", host ? hostRoom : startBotMatch);
+  // Quick matches use a server-assigned battlefield, so only the room creator
+  // (bot match or coded host) gets to pick one.
+  if (!quick) {
+    const terr = el("label", "selector");
+    terr.appendChild(el("span", undefined, "Battlefield:"));
+    const sel = document.createElement("select");
+    for (const t of Object.keys(TERRITORIES)) {
+      const o = document.createElement("option");
+      o.value = t;
+      o.textContent = territoryDef(t).name;
+      if (t === territoryId) o.selected = true;
+      sel.appendChild(o);
+    }
+    sel.addEventListener("change", () => {
+      territoryId = sel.value;
+      render();
+    });
+    terr.appendChild(sel);
+    footer.appendChild(terr);
+    footer.appendChild(el("div", "terr-desc", territoryDef(territoryId).describe));
+  }
+
+  const heroName = heroDef(humanHeroId).name;
+  const startLabel = quick
+    ? `Find match as ${heroName} ▸`
+    : host
+      ? `Create room as ${heroName} ▸`
+      : `Start as ${heroName} ▶`;
+  const start = el("button", "btn btn-primary btn-big", startLabel);
+  start.addEventListener("click", quick ? quickRoom : host ? hostRoom : startBotMatch);
   footer.appendChild(start);
 
   const back = el("button", "btn btn-ghost", "↩ Back");
@@ -484,8 +569,13 @@ function renderLobby(): void {
   app.appendChild(header);
 
   const lobby = el("div", "lobby");
-  lobby.appendChild(el("div", "lobby-label", "ROOM CODE — share this with your opponent"));
-  lobby.appendChild(el("div", "lobby-code", roomCode || "····"));
+  if (autoQueue) {
+    lobby.appendChild(el("div", "lobby-label", "QUICK MATCH"));
+    lobby.appendChild(el("div", "lobby-code", "···"));
+  } else {
+    lobby.appendChild(el("div", "lobby-label", "ROOM CODE — share this with your opponent"));
+    lobby.appendChild(el("div", "lobby-code", roomCode || "····"));
+  }
   lobby.appendChild(el("div", "status", statusMsg || "Connecting…"));
   const spinner = el("div", "lobby-dots", "● ● ●");
   lobby.appendChild(spinner);
@@ -514,7 +604,7 @@ function renderMatch(): void {
   top.appendChild(el("span", "pill", `Turn ${game.turn}`));
   top.appendChild(el("span", "pill pill-energy", `⚡ Energy ${human.energy}/${human.energyCap}  (+1 each turn, max 8)`));
   top.appendChild(el("span", "pill", `First to ${game.pointsToWin}`));
-  if (mode === "online") top.appendChild(el("span", "pill", `Room ${roomCode}`));
+  if (mode === "online") top.appendChild(el("span", "pill", autoQueue ? "Quick Match" : `Room ${roomCode}`));
   header.appendChild(top);
   header.appendChild(
     el("div", "battlefield", `Battlefield: ${territoryDef(game.territoryId).name} — ${territoryDef(game.territoryId).describe}`),
@@ -581,6 +671,23 @@ function renderMatch(): void {
     logEl.appendChild(el("div", cls, relabel(line.trim())));
   }
   app.appendChild(logEl);
+
+  // Our own connection dropped — board is stale, block play until we're back.
+  if (reconnecting) {
+    const banner = el("div", "banner draw");
+    banner.textContent = statusMsg || "Connection lost — reconnecting…";
+    app.appendChild(banner);
+    app.appendChild(matchControls(false));
+    return;
+  }
+
+  // Opponent dropped: seat is held server-side. Show a notice but keep the
+  // board visible (the server resolves the turn once they're back).
+  if (oppDropped && !checkWinCondition(game)) {
+    const notice = el("div", "banner draw");
+    notice.textContent = statusMsg || "Opponent dropped — holding their seat…";
+    app.appendChild(notice);
+  }
 
   // Opponent-left banner takes precedence.
   if (oppLeft) {
@@ -701,6 +808,19 @@ function matchControls(ended: boolean): HTMLElement {
     if (mode === "bot") {
       const again = el("button", "btn btn-primary", "Play again");
       again.addEventListener("click", startBotMatch);
+      row.appendChild(again);
+    } else if (!oppLeft) {
+      // Online: rematch needs both players. Reflect vote state on the button.
+      const label = rematchVoted
+        ? oppRematchVoted ? "Starting rematch…" : "Waiting for opponent…"
+        : oppRematchVoted ? "Rematch (opponent ready) ▸" : "Rematch ▸";
+      const again = el("button", "btn btn-primary", label);
+      if (rematchVoted) (again as HTMLButtonElement).disabled = true;
+      again.addEventListener("click", () => {
+        rematchVoted = true;
+        net.sendRematch();
+        render();
+      });
       row.appendChild(again);
     }
     const menu = el("button", "btn btn-ghost", "↩ Menu");

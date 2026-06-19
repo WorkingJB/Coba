@@ -22,6 +22,10 @@ import { makeRng, type Rng } from "../src/rng.js";
 const DEFAULT_HERO = "shade";
 const DEFAULT_TERRITORY = "neutral_field";
 
+// How long (seconds) a seat is held open after an unexpected disconnect before
+// the match is awarded as abandoned. The client retries within this window.
+const RECONNECT_WINDOW = 30;
+
 interface JoinOptions {
   code?: string;
   hero?: string;
@@ -60,6 +64,8 @@ export class CobaRoom extends Room {
   private heroChoice: Record<PlayerId, string> = { P1: DEFAULT_HERO, P2: DEFAULT_HERO };
   private territoryId = DEFAULT_TERRITORY;
   private pending: Record<PlayerId, PlannedAction | null> = { P1: null, P2: null };
+  /** Seats that have voted to rematch while phase === "ended". */
+  private rematchVotes = new Set<PlayerId>();
 
   override onCreate(options: JoinOptions): void {
     this.maxClients = 2;
@@ -73,6 +79,7 @@ export class CobaRoom extends Room {
     this.setMetadata({ code: this.code });
 
     this.onMessage("lock", (client, action: PlannedAction) => this.onLock(client, action));
+    this.onMessage("rematch", (client) => this.onRematch(client));
   }
 
   override onJoin(client: Client, options: JoinOptions): void {
@@ -104,6 +111,8 @@ export class CobaRoom extends Room {
       rng: this.rng,
     });
     this.phase = "playing";
+    this.pending = { P1: null, P2: null };
+    this.rematchVotes.clear();
     this.lock(); // no late joiners
     this.broadcastState();
   }
@@ -131,17 +140,67 @@ export class CobaRoom extends Room {
 
   private broadcastState(): void {
     if (!this.game) return;
+    for (const client of this.clients) this.sendStateTo(client);
+  }
+
+  /** Send the authoritative, seat-redacted state to a single client. */
+  private sendStateTo(client: Client): void {
+    if (!this.game) return;
+    const seat = this.seats.get(client.sessionId);
+    if (!seat) return;
     const result = checkWinCondition(this.game);
-    for (const client of this.clients) {
-      const seat = this.seats.get(client.sessionId);
-      if (!seat) continue;
-      client.send("state", { state: redactFor(this.game, seat), result, seat });
+    client.send("state", { state: redactFor(this.game, seat), result, seat });
+  }
+
+  /**
+   * Rematch: both seats must vote while the match is over. When the second
+   * vote lands we reseed and start a fresh match in the same room, keeping the
+   * hero/territory choices and seat assignments.
+   */
+  private onRematch(client: Client): void {
+    if (this.phase !== "ended" || this.seats.size < 2) return;
+    const seat = this.seats.get(client.sessionId);
+    if (!seat) return;
+
+    this.rematchVotes.add(seat);
+    this.broadcast("rematchVote", { seat });
+
+    if (this.rematchVotes.size === 2) {
+      // Fresh seed so the rematch isn't a continuation of the same RNG stream.
+      this.rng = makeRng(Math.floor(Math.random() * 1_000_000_000));
+      this.startMatch();
     }
   }
 
-  override onLeave(client: Client): void {
+  // `consented` is true only for an intentional client.leave() (menu/quit). An
+  // unexpected transport drop arrives with consented=false — we hold the seat
+  // open for RECONNECT_WINDOW seconds rather than ending the match.
+  override async onLeave(client: Client, consented: boolean): Promise<void> {
     const seat = this.seats.get(client.sessionId);
+    if (!seat) return;
+
+    // Intentional quit, or a drop outside an active match → end immediately.
+    if (consented || this.phase !== "playing") {
+      this.endByLeave(client, seat);
+      return;
+    }
+
+    this.broadcast("opponentDropped", { seat }, { except: client });
+    try {
+      // Reconnection preserves sessionId, so `seats` stays valid. Push the
+      // current authoritative state so the returning client rebuilds its board.
+      const returned = await this.allowReconnection(client, RECONNECT_WINDOW);
+      this.broadcast("opponentReturned", { seat }, { except: returned });
+      this.sendStateTo(returned);
+    } catch {
+      this.endByLeave(client, seat);
+    }
+  }
+
+  /** Award the match as abandoned and free the seat. */
+  private endByLeave(client: Client, seat: PlayerId): void {
     this.seats.delete(client.sessionId);
+    this.rematchVotes.delete(seat);
     if (this.phase !== "ended") {
       this.phase = "ended";
       this.broadcast("opponentLeft", { seat }, { except: client });
