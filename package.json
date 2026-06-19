@@ -6,16 +6,27 @@
   "description": "Coba — pure card-resolution engine (Build Sequence step 1, console only)",
   "scripts": {
     "dev": "vite",
+    "server": "tsx watch server/index.ts",
+    "build": "vite build",
     "build:web": "vite build",
+    "start": "tsx server/index.ts",
     "preview": "vite preview",
     "sim": "tsx src/sim.ts",
     "sim:bench": "tsx src/sim.ts --bench",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.25",
     "@types/node": "^22.19.21",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3",
     "vite": "^5.4.21"
+  },
+  "dependencies": {
+    "colyseus": "^0.15.57",
+    "colyseus.js": "^0.15.28",
+    "cors": "^2.8.6",
+    "express": "^4.22.2"
   }
 }

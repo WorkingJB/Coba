@@ -1,0 +1,21 @@
+# Coba — single Fly app: the Colyseus match server + the built web client.
+# App + org are both "coba-246" (the project's Fly org slug).
+app = "coba-246"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 2567
+  force_https = true            # clients connect over wss://
+  # SINGLE MACHINE ONLY. Match rooms are in-memory, so both players must hit the
+  # same instance — scaling past 1 machine needs the Colyseus Redis driver
+  # (see ARCHITECTURE.md §4). Deploy with `fly deploy --ha=false`.
+  # One warm machine also keeps in-progress matches alive (no mid-game stop).
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

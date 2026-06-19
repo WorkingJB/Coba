@@ -70,7 +70,7 @@ What the pass established:
 - **Volcanic Forge swing is very strong** (Warden 46% → 7%); the +2/spell modifier likely wants toning down now that the Shade runs 6 spells.
 - Greedy bot rarely opens the *third* zone if it can hold two — a bot limitation; a human will contest all three.
 - **Hero abilities are high-leverage and bot-tuned** — the win-rate is sensitive to ±1 on ability numbers; expect to retune from human play.
-- No networking (step 4), no persistence (step 3) yet.
+- Networked human-vs-human (step 4) is in; no persistence (step 3) yet.
 
 ## Browser client (step 2) — human vs bot
 
@@ -101,3 +101,43 @@ beat** (`REVEAL_MS`) before resolving — so the board doesn't snap instantly. B
 This is deliberately DOM, not Phaser: the goal of step 2 is to *validate the loop with
 a human* as fast as possible. Phaser/canvas juice layers on later without touching the
 engine (the engine stays the shared authority).
+
+## Multiplayer (step 4) — human vs human
+
+An authoritative [Colyseus](https://colyseus.io) server (`server/`) reuses the **same**
+`src/engine.ts` as the simulator and bot client — resolution only ever happens on the
+server. Players match via a short **room code** (host creates, opponent joins). The
+server owns the RNG and **redacts each player's view** so the opponent's hand never
+crosses the wire. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.
+
+### Run it locally (two terminals)
+
+```bash
+npm run server   # Colyseus match server on :2567
+npm run dev      # Vite client on :5173 (auto-connects to the server)
+```
+
+Open the client in **two browser tabs**: one picks **Create Room** (shows a 4-letter
+code), the other picks **Join Room** and enters it. The bot mode (**Play vs Bot**) still
+runs entirely client-side with no server.
+
+| File | Responsibility |
+| --- | --- |
+| `server/CobaRoom.ts` | Authoritative 2-player room: lobby, both-locked resolution, hand redaction |
+| `server/index.ts` | Colyseus + Express; serves the built client in production |
+| `src/web/net.ts` | `colyseus.js` wrapper (create/join by code, lock, callbacks) |
+
+### Deploy to Fly.io (over-the-internet testing)
+
+One app serves both the websocket traffic and the built client. The `Dockerfile` runs
+`vite build` then `npm run start`.
+
+```bash
+fly launch --no-deploy   # first time: claims a unique app name, writes/keeps fly.toml
+fly deploy               # build image, ship it
+fly open                 # open the deployed client
+```
+
+`fly.toml` keeps one machine warm (`min_machines_running = 1`) so a live match isn't
+killed mid-game; flip that off to cut idle cost once test windows are predictable.
+No database or secrets are needed for this milestone — persistence is step 3.

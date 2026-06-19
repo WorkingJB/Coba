@@ -266,6 +266,38 @@ body {
   padding: 4px 6px; font-family: inherit; font-size: 12px;
 }
 
+/* ---- main menu ---- */
+.menu { display: flex; flex-direction: column; gap: 10px; max-width: 320px; }
+.menu .btn-big { margin-left: 0; width: 100%; text-align: left; }
+.status { color: var(--muted); font-size: 13px; }
+
+/* ---- join: room code entry ---- */
+.join-wrap { display: flex; flex-direction: column; gap: 8px; }
+.code-input {
+  background: var(--panel); color: var(--text);
+  border: 1px solid var(--line); border-radius: 8px;
+  padding: 10px 14px; font-family: inherit;
+  font-size: 28px; letter-spacing: 10px; text-transform: uppercase;
+  width: 220px; text-align: center;
+}
+.code-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+
+/* ---- lobby: waiting for opponent ---- */
+.lobby {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  display: flex; flex-direction: column; gap: 12px; align-items: center;
+}
+.lobby-label { color: var(--muted); letter-spacing: 2px; font-size: 12px; }
+.lobby-code {
+  font-size: 48px; font-weight: bold; letter-spacing: 14px;
+  color: var(--accent); text-indent: 14px;
+}
+.lobby-dots { color: var(--accent); letter-spacing: 4px; animation: pulse 1.2s ease-in-out infinite; }
+
 @media (max-width: 620px) {
   .hero-choice, .zones { grid-template-columns: 1fr; }
   .card { width: calc(50% - 5px); }

@@ -1,6 +1,8 @@
-// Coba browser client — human (P1) vs greedy bot (P2), entirely client-side.
-// Two screens: a pre-match hero-select (with deck library) and the match itself.
-// Reuses the SAME pure engine the simulator uses (src/engine.ts) as authority.
+// Coba browser client. Two modes share one match renderer:
+//   · bot    — human (P1) vs greedy bot (P2), resolved locally (Build step 2).
+//   · online — human vs human over Colyseus; the SERVER is authority and the
+//              client only sends its locked action and renders returned state.
+// Reuses the SAME pure engine the simulator uses (src/engine.ts).
 
 import { initGame, resolveTurn, checkWinCondition } from "../engine.js";
 import { chooseAction } from "../bot.js";
@@ -14,33 +16,53 @@ import {
   type PlayerId,
   type ZoneId,
   ZONE_IDS,
+  opponentOf,
 } from "../types.js";
+import * as net from "./net.js";
 
-const HUMAN = "P1" as const;
-const BOT = "P2" as const;
 const REVEAL_MS = 1000; // beat between lock-in and resolution so the reveal is readable
 
-type Screen = "select" | "match";
+type Mode = "bot" | "online";
+type Screen = "menu" | "select" | "join" | "lobby" | "match";
 
-let screen: Screen = "select";
+let mode: Mode = "bot";
+let screen: Screen = "menu";
+let seat: PlayerId = "P1"; // which side the local player controls
 let humanHeroId = "shade";
 let territoryId = "neutral_field";
 
-let game: GameState;
-let rng: Rng;
+let roomCode = "";
+let joinCodeInput = "";
+let statusMsg = "";
+let oppLocked = false; // online: opponent has locked this turn
+let oppLeft = false; // online: opponent disconnected
+
+let game: GameState | null = null;
+let rng: Rng; // bot mode only
 let selectedCard: string | null = null;
 let armedAbility: ZoneId | null = null; // hero ability aimed for this turn
 let abilityTargeting = false; // currently choosing a zone for the ability
 let lastLogLen = 0;
-let pending: { human: PlannedAction; bot: PlannedAction } | null = null;
+let pending: { human: PlannedAction; bot: PlannedAction | null } | null = null;
 let prevPoints: Record<PlayerId, number> = { P1: 0, P2: 0 };
 let lastGain: Record<PlayerId, number> = { P1: 0, P2: 0 };
 
 const app = document.getElementById("app")!;
 
-// ---------- flow ----------
+const foe = (): PlayerId => opponentOf(seat);
+const oppLabel = (): string => (mode === "bot" ? "BOT" : "OPP");
 
-function startMatch(): void {
+function clearSelections(): void {
+  selectedCard = null;
+  armedAbility = null;
+  abilityTargeting = false;
+}
+
+// ---------- flow: bot ----------
+
+function startBotMatch(): void {
+  mode = "bot";
+  seat = "P1";
   rng = makeRng(Math.floor(Math.random() * 1_000_000_000));
   game = initGame({
     p1HeroId: humanHeroId,
@@ -48,29 +70,146 @@ function startMatch(): void {
     territoryId,
     rng,
   });
-  selectedCard = null;
-  armedAbility = null;
-  abilityTargeting = false;
-  lastLogLen = 0;
-  pending = null;
-  prevPoints = { P1: 0, P2: 0 };
-  lastGain = { P1: 0, P2: 0 };
+  resetMatchUi();
   screen = "match";
   render();
 }
 
-function takeTurn(humanAction: PlannedAction): void {
-  if (checkWinCondition(game) || pending) return;
-  pending = { human: humanAction, bot: chooseAction(game, BOT) };
-  selectedCard = null;
-  armedAbility = null;
-  abilityTargeting = false;
+function resetMatchUi(): void {
+  clearSelections();
+  lastLogLen = 0;
+  pending = null;
+  oppLocked = false;
+  oppLeft = false;
+  prevPoints = { P1: 0, P2: 0 };
+  lastGain = { P1: 0, P2: 0 };
+}
+
+// ---------- flow: online ----------
+
+function genCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no ambiguous I/O/0/1
+  let s = "";
+  for (let i = 0; i < 4; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return s;
+}
+
+const netCallbacks: net.NetCallbacks = {
+  onSeat: (s, code) => {
+    seat = s;
+    roomCode = code;
+    render();
+  },
+  onLobby: (info) => {
+    statusMsg = info.players < 2 ? "Waiting for opponent…" : "Opponent joined — starting…";
+    render();
+  },
+  onState: (msg) => applyServerState(msg),
+  onOpponentLocked: () => {
+    oppLocked = true;
+    render();
+  },
+  onOpponentLeft: () => {
+    oppLeft = true;
+    statusMsg = "Opponent left — match ended.";
+    render();
+  },
+  onError: (m) => {
+    statusMsg = m;
+    render();
+  },
+};
+
+async function hostRoom(): Promise<void> {
+  mode = "online";
+  roomCode = genCode();
+  resetMatchUi();
+  statusMsg = "Creating room…";
+  screen = "lobby";
   render();
-  window.setTimeout(resolvePending, REVEAL_MS);
+  try {
+    await net.createRoom(roomCode, humanHeroId, territoryId, netCallbacks);
+    statusMsg = "Waiting for opponent…";
+    render();
+  } catch {
+    statusMsg = "Could not reach the server. Is it running?";
+    screen = "menu";
+    render();
+  }
+}
+
+async function joinRoomFlow(): Promise<void> {
+  const code = joinCodeInput.trim().toUpperCase();
+  if (code.length !== 4) {
+    statusMsg = "Enter the 4-character room code.";
+    render();
+    return;
+  }
+  mode = "online";
+  roomCode = code;
+  resetMatchUi();
+  statusMsg = "Joining…";
+  screen = "lobby";
+  render();
+  try {
+    await net.joinRoom(code, humanHeroId, netCallbacks);
+  } catch {
+    statusMsg = `No room found for "${code}".`;
+    screen = "join";
+    render();
+  }
+}
+
+function applyServerState(msg: net.StateMsg): void {
+  prevPoints = game
+    ? { P1: game.players.P1.points, P2: game.players.P2.points }
+    : { P1: 0, P2: 0 };
+  lastLogLen = game ? game.log.length : 0;
+  const g = msg.state;
+  lastGain = {
+    P1: g.players.P1.points - prevPoints.P1,
+    P2: g.players.P2.points - prevPoints.P2,
+  };
+  game = g;
+  seat = msg.seat;
+  pending = null;
+  oppLocked = false;
+  clearSelections();
+  screen = "match";
+  render();
+}
+
+function toMenu(): void {
+  if (mode === "online") net.leave();
+  mode = "bot";
+  game = null;
+  pending = null;
+  statusMsg = "";
+  oppLeft = false;
+  clearSelections();
+  screen = "menu";
+  render();
+}
+
+// ---------- turn handling ----------
+
+function takeTurn(action: PlannedAction): void {
+  if (!game || checkWinCondition(game) || pending) return;
+  if (mode === "bot") {
+    pending = { human: action, bot: chooseAction(game, foe()) };
+    clearSelections();
+    render();
+    window.setTimeout(resolvePending, REVEAL_MS);
+  } else {
+    pending = { human: action, bot: null };
+    net.sendLock(action);
+    clearSelections();
+    render();
+  }
 }
 
 function resolvePending(): void {
-  if (!pending) return;
+  if (!pending || !game || pending.bot === null) return; // bot mode only
   const { human, bot } = pending;
   lastLogLen = game.log.length;
   prevPoints = { P1: game.players.P1.points, P2: game.players.P2.points };
@@ -84,7 +223,7 @@ function resolvePending(): void {
 }
 
 function commitCard(cardId: string, zone: ZoneId): void {
-  takeTurn({ player: HUMAN, cardId, zone, ability: armedAbility });
+  takeTurn({ player: seat, cardId, zone, ability: armedAbility });
 }
 
 function onPickCard(cardId: string): void {
@@ -108,11 +247,11 @@ function onPickZone(zone: ZoneId): void {
 
 function onPass(): void {
   if (pending) return;
-  takeTurn({ player: HUMAN, cardId: null, zone: null, ability: armedAbility });
+  takeTurn({ player: seat, cardId: null, zone: null, ability: armedAbility });
 }
 
 function onUseAbility(): void {
-  if (pending || game.players[HUMAN].abilityReady > 0) return;
+  if (pending || !game || game.players[seat].abilityReady > 0) return;
   abilityTargeting = true;
   selectedCard = null;
   render();
@@ -130,7 +269,7 @@ function describeAction(a: PlannedAction): string {
     const c = cardDef(a.cardId);
     parts.push(c.allZones ? `${c.name} → all zones` : `${c.name} → ${a.zone}`);
   }
-  if (a.ability) {
+  if (a.ability && game) {
     const name = heroDef(game.players[a.player].heroId).ability.name;
     parts.push(`${name} → ${a.ability}`);
   }
@@ -171,31 +310,8 @@ function cardEl(id: string, opts: { count?: number; mini?: boolean } = {}): HTML
   return card;
 }
 
-// ---------- screen: hero select ----------
-
-function renderSelect(): void {
-  app.innerHTML = "";
-
-  const header = el("div", "header");
-  header.appendChild(el("h1", undefined, "COBA"));
-  header.appendChild(el("div", "tagline", "Tactical card combat for three zones. Choose your hero."));
-  app.appendChild(header);
-
-  // How it works.
-  const rules = el("div", "rules");
-  rules.appendChild(el("div", "rules-title", "HOW A MATCH WORKS"));
-  const ul = el("ul", "rules-list");
-  for (const line of [
-    "Each turn you and the bot secretly pick ONE card + a zone, then reveal at the same time.",
-    "Hold a zone at end of turn (more presence than the bot) to score 1 point — all three zones score every turn.",
-    "Energy starts at 1 and rises +1 each turn (max 8). Bigger cards cost more, so your options grow over time.",
-    "First to 12 points wins. The battlefield bends the rules (not raw power).",
-  ]) ul.appendChild(el("li", undefined, line));
-  rules.appendChild(ul);
-  app.appendChild(rules);
-
-  // Hero choice with deck libraries.
-  app.appendChild(el("div", "section-label", "CHOOSE YOUR HERO"));
+/** Hero panels grid, shared by the bot/host select and the join screen. */
+function heroChoiceEl(): HTMLElement {
   const heroes = el("div", "hero-choice");
   for (const id of HERO_IDS) {
     const h = heroDef(id);
@@ -216,9 +332,74 @@ function renderSelect(): void {
     });
     heroes.appendChild(panel);
   }
-  app.appendChild(heroes);
+  return heroes;
+}
 
-  // Battlefield + start.
+// ---------- screen: menu ----------
+
+function renderMenu(): void {
+  app.innerHTML = "";
+  const header = el("div", "header");
+  header.appendChild(el("h1", undefined, "COBA"));
+  header.appendChild(el("div", "tagline", "Tactical card combat for three zones."));
+  app.appendChild(header);
+
+  const menu = el("div", "menu");
+  const bot = el("button", "btn btn-primary btn-big", "Play vs Bot");
+  bot.addEventListener("click", () => {
+    mode = "bot";
+    screen = "select";
+    render();
+  });
+  const create = el("button", "btn btn-big", "Create Room ▸");
+  create.addEventListener("click", () => {
+    mode = "online";
+    screen = "select";
+    render();
+  });
+  const join = el("button", "btn btn-big", "Join Room ▸");
+  join.addEventListener("click", () => {
+    mode = "online";
+    statusMsg = "";
+    screen = "join";
+    render();
+  });
+  menu.appendChild(bot);
+  menu.appendChild(create);
+  menu.appendChild(join);
+  app.appendChild(menu);
+
+  if (statusMsg) app.appendChild(el("div", "status", statusMsg));
+}
+
+// ---------- screen: hero select (bot match or online host) ----------
+
+function renderSelect(): void {
+  app.innerHTML = "";
+  const host = mode === "online";
+
+  const header = el("div", "header");
+  header.appendChild(el("h1", undefined, "COBA"));
+  header.appendChild(
+    el("div", "tagline", host ? "Create a room — pick your hero and battlefield." : "Choose your hero."),
+  );
+  app.appendChild(header);
+
+  const rules = el("div", "rules");
+  rules.appendChild(el("div", "rules-title", "HOW A MATCH WORKS"));
+  const ul = el("ul", "rules-list");
+  for (const line of [
+    `Each turn you and your ${host ? "opponent" : "opponent"} secretly pick ONE card + a zone, then reveal at the same time.`,
+    "Hold a zone at end of turn (more presence than your opponent) to score 1 point — all three zones score every turn.",
+    "Energy starts at 1 and rises +1 each turn (max 8). Bigger cards cost more, so your options grow over time.",
+    "First to 12 points wins. The battlefield bends the rules (not raw power).",
+  ]) ul.appendChild(el("li", undefined, line));
+  rules.appendChild(ul);
+  app.appendChild(rules);
+
+  app.appendChild(el("div", "section-label", "CHOOSE YOUR HERO"));
+  app.appendChild(heroChoiceEl());
+
   const footer = el("div", "select-footer");
   const terr = el("label", "selector");
   terr.appendChild(el("span", undefined, "Battlefield:"));
@@ -238,19 +419,94 @@ function renderSelect(): void {
   footer.appendChild(terr);
   footer.appendChild(el("div", "terr-desc", territoryDef(territoryId).describe));
 
-  const start = el("button", "btn btn-primary btn-big", `Start as ${heroDef(humanHeroId).name} ▶`);
-  start.addEventListener("click", startMatch);
+  const start = el(
+    "button",
+    "btn btn-primary btn-big",
+    host ? `Create room as ${heroDef(humanHeroId).name} ▸` : `Start as ${heroDef(humanHeroId).name} ▶`,
+  );
+  start.addEventListener("click", host ? hostRoom : startBotMatch);
   footer.appendChild(start);
+
+  const back = el("button", "btn btn-ghost", "↩ Back");
+  back.addEventListener("click", toMenu);
+  footer.appendChild(back);
   app.appendChild(footer);
+}
+
+// ---------- screen: join (enter code + hero) ----------
+
+function renderJoin(): void {
+  app.innerHTML = "";
+  const header = el("div", "header");
+  header.appendChild(el("h1", undefined, "COBA"));
+  header.appendChild(el("div", "tagline", "Join a room — enter the code your opponent shared."));
+  app.appendChild(header);
+
+  const codeWrap = el("div", "join-wrap");
+  codeWrap.appendChild(el("div", "section-label", "ROOM CODE"));
+  const input = document.createElement("input");
+  input.className = "code-input";
+  input.maxLength = 4;
+  input.placeholder = "ABCD";
+  input.value = joinCodeInput;
+  input.autocapitalize = "characters";
+  input.addEventListener("input", () => {
+    joinCodeInput = input.value.toUpperCase();
+    input.value = joinCodeInput;
+  });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") joinRoomFlow();
+  });
+  codeWrap.appendChild(input);
+  app.appendChild(codeWrap);
+
+  app.appendChild(el("div", "section-label", "CHOOSE YOUR HERO"));
+  app.appendChild(heroChoiceEl());
+
+  if (statusMsg) app.appendChild(el("div", "status", statusMsg));
+
+  const footer = el("div", "select-footer");
+  const join = el("button", "btn btn-primary btn-big", "Join match ▸");
+  join.addEventListener("click", joinRoomFlow);
+  footer.appendChild(join);
+  const back = el("button", "btn btn-ghost", "↩ Back");
+  back.addEventListener("click", toMenu);
+  footer.appendChild(back);
+  app.appendChild(footer);
+}
+
+// ---------- screen: lobby (waiting) ----------
+
+function renderLobby(): void {
+  app.innerHTML = "";
+  const header = el("div", "header");
+  header.appendChild(el("h1", undefined, "COBA"));
+  app.appendChild(header);
+
+  const lobby = el("div", "lobby");
+  lobby.appendChild(el("div", "lobby-label", "ROOM CODE — share this with your opponent"));
+  lobby.appendChild(el("div", "lobby-code", roomCode || "····"));
+  lobby.appendChild(el("div", "status", statusMsg || "Connecting…"));
+  const spinner = el("div", "lobby-dots", "● ● ●");
+  lobby.appendChild(spinner);
+  app.appendChild(lobby);
+
+  const cancel = el("button", "btn btn-ghost", "Cancel");
+  cancel.addEventListener("click", toMenu);
+  app.appendChild(cancel);
 }
 
 // ---------- screen: match ----------
 
 function renderMatch(): void {
+  if (!game) return;
   app.innerHTML = "";
+  const me = seat;
+  const opp = foe();
   const result = checkWinCondition(game);
-  const human = game.players[HUMAN];
-  const bot = game.players[BOT];
+  const human = game.players[me];
+  const bot = game.players[opp];
+  const localHeroId = human.heroId;
 
   // Header with explicit energy readout.
   const header = el("div", "header");
@@ -258,31 +514,31 @@ function renderMatch(): void {
   top.appendChild(el("span", "pill", `Turn ${game.turn}`));
   top.appendChild(el("span", "pill pill-energy", `⚡ Energy ${human.energy}/${human.energyCap}  (+1 each turn, max 8)`));
   top.appendChild(el("span", "pill", `First to ${game.pointsToWin}`));
+  if (mode === "online") top.appendChild(el("span", "pill", `Room ${roomCode}`));
   header.appendChild(top);
   header.appendChild(
     el("div", "battlefield", `Battlefield: ${territoryDef(game.territoryId).name} — ${territoryDef(game.territoryId).describe}`),
   );
   app.appendChild(header);
 
-  // Scoreboard — points live here (separated from the action log), with the
-  // points gained on the last resolved turn and a zones-held tally.
+  // Scoreboard.
   const zonesHeld = (p: PlayerId) =>
     ZONE_IDS.filter((z) => {
-      const a = game.zones[z].presence[HUMAN];
-      const b = game.zones[z].presence[BOT];
-      return p === HUMAN ? a > b : b > a;
+      const a = game!.zones[z].presence[me];
+      const b = game!.zones[z].presence[opp];
+      return p === me ? a > b : b > a;
     }).length;
   const score = el("div", "score");
   const youScore = el("div", "score-you");
   youScore.innerHTML =
     `<div class="score-pts">YOU — <b>${human.points}</b> pts` +
-    (lastGain.P1 > 0 ? ` <span class="gain">+${lastGain.P1}</span>` : "") +
-    `</div><div class="score-zones">holding ${zonesHeld(HUMAN)}/3 zones</div>`;
+    (lastGain[me] > 0 ? ` <span class="gain">+${lastGain[me]}</span>` : "") +
+    `</div><div class="score-zones">holding ${zonesHeld(me)}/3 zones</div>`;
   const botScore = el("div", "score-bot");
   botScore.innerHTML =
-    `<div class="score-pts">BOT — <b>${bot.points}</b> pts` +
-    (lastGain.P2 > 0 ? ` <span class="gain">+${lastGain.P2}</span>` : "") +
-    `</div><div class="score-zones">holding ${zonesHeld(BOT)}/3 zones</div>`;
+    `<div class="score-pts">${oppLabel()} — <b>${bot.points}</b> pts` +
+    (lastGain[opp] > 0 ? ` <span class="gain">+${lastGain[opp]}</span>` : "") +
+    `</div><div class="score-zones">holding ${zonesHeld(opp)}/3 zones</div>`;
   score.appendChild(youScore);
   score.appendChild(botScore);
   app.appendChild(score);
@@ -290,8 +546,8 @@ function renderMatch(): void {
   // Zones.
   const zonesEl = el("div", "zones");
   for (const z of ZONE_IDS) {
-    const youP = game.zones[z].presence[HUMAN];
-    const botP = game.zones[z].presence[BOT];
+    const youP = game.zones[z].presence[me];
+    const botP = game.zones[z].presence[opp];
     const ctrl = youP > botP ? "you" : botP > youP ? "bot" : "tie";
     const targetable = (selectedCard || abilityTargeting) && !pending && !result;
     const zone = el("div", `zone zone-${ctrl}` + (targetable ? " zone-targetable" : ""));
@@ -299,7 +555,7 @@ function renderMatch(): void {
     nameRow.appendChild(el("span", "zone-name", z));
     if (ctrl !== "tie") nameRow.appendChild(el("span", `zone-pip pip-${ctrl}`, "★ +1"));
     zone.appendChild(nameRow);
-    const ctrlLabel = ctrl === "you" ? "YOU control" : ctrl === "bot" ? "BOT controls" : "contested";
+    const ctrlLabel = ctrl === "you" ? "YOU control" : ctrl === "bot" ? `${oppLabel()} controls` : "contested";
     zone.appendChild(el("div", "zone-ctrl", ctrlLabel));
     const max = Math.max(youP, botP, 1);
     const you = el("div", "zone-side you");
@@ -313,34 +569,49 @@ function renderMatch(): void {
   }
   app.appendChild(zonesEl);
 
-  // Action log — ONLY card plays now (control/scoring moved to the scoreboard & zones).
+  // Action log — relabelled to the local player's perspective.
   const logEl = el("div", "log");
   logEl.appendChild(el("div", "log-head", "LAST TURN"));
-  const relabel = (l: string) => l.replaceAll("P1", "YOU").replaceAll("P2", "BOT");
+  const relabel = (l: string) => l.replaceAll(me, "YOU").replaceAll(opp, oppLabel());
   const isPlay = (l: string) => /plays|casts|passes|uses|afford|in hand/.test(l);
   const lines = game.log.slice(lastLogLen).filter(isPlay);
   if (lines.length === 0) logEl.appendChild(el("div", "log-line muted", "Your move — pick a card."));
   for (const line of lines) {
-    const cls = line.includes("P1") ? "log-line you" : line.includes("P2") ? "log-line bot" : "log-line";
+    const cls = line.includes(me) ? "log-line you" : line.includes(opp) ? "log-line bot" : "log-line";
     logEl.appendChild(el("div", cls, relabel(line.trim())));
   }
   app.appendChild(logEl);
 
-  // Reveal beat.
-  if (pending) {
-    const reveal = el("div", "resolving");
-    reveal.appendChild(el("div", "resolving-title", "● LOCKED IN — RESOLVING…"));
-    reveal.appendChild(el("div", "resolving-line you", `YOU: ${describeAction(pending.human)}`));
-    reveal.appendChild(el("div", "resolving-line bot", "BOT: revealing…"));
-    app.appendChild(reveal);
-    app.appendChild(matchControls());
+  // Opponent-left banner takes precedence.
+  if (oppLeft) {
+    const banner = el("div", "banner lose");
+    banner.textContent = statusMsg || "Opponent left — match ended.";
+    app.appendChild(banner);
+    app.appendChild(matchControls(result !== null));
     return;
   }
 
-  // Result or hand.
+  // Reveal / waiting beat.
+  if (pending) {
+    const reveal = el("div", "resolving");
+    if (mode === "bot") {
+      reveal.appendChild(el("div", "resolving-title", "● LOCKED IN — RESOLVING…"));
+      reveal.appendChild(el("div", "resolving-line you", `YOU: ${describeAction(pending.human)}`));
+      reveal.appendChild(el("div", "resolving-line bot", "BOT: revealing…"));
+    } else {
+      reveal.appendChild(el("div", "resolving-title", "● LOCKED IN — WAITING FOR OPPONENT…"));
+      reveal.appendChild(el("div", "resolving-line you", `YOU: ${describeAction(pending.human)}`));
+      reveal.appendChild(el("div", "resolving-line bot", oppLocked ? "OPP: locked in ✓" : "OPP: choosing…"));
+    }
+    app.appendChild(reveal);
+    app.appendChild(matchControls(false));
+    return;
+  }
+
+  // Result.
   if (result) {
     const banner = el("div", "banner");
-    const won = result.winner === HUMAN;
+    const won = result.winner === me;
     banner.classList.add(result.winner === "DRAW" ? "draw" : won ? "win" : "lose");
     banner.textContent =
       result.winner === "DRAW"
@@ -349,29 +620,29 @@ function renderMatch(): void {
           ? `YOU WIN — ${human.points}–${bot.points} (by ${result.reason})`
           : `YOU LOSE — ${human.points}–${bot.points} (by ${result.reason})`;
     app.appendChild(banner);
-    app.appendChild(matchControls());
+    app.appendChild(matchControls(true));
     return;
   }
 
   // Hero ability.
-  app.appendChild(abilityPanel());
+  app.appendChild(abilityPanel(localHeroId));
 
   // Hand.
-  const sel = selectedCard ? cardDef(selectedCard) : null;
+  const selCard = selectedCard ? cardDef(selectedCard) : null;
   const handWrap = el("div", "hand-wrap");
-  const abilityName = heroDef(humanHeroId).ability.name;
+  const abilityName = heroDef(localHeroId).ability.name;
   const prompt = abilityTargeting
     ? `▶ Click a zone to aim ${abilityName}`
-    : sel
-      ? sel.allZones
+    : selCard
+      ? selCard.allZones
         ? "▶ Hits ALL zones — press Cast Everywhere (or click any zone)"
         : "▶ Now click a zone to play it"
       : "Pick a card to play" + (armedAbility ? ` (${abilityName} aimed → ${armedAbility})` : "");
   handWrap.appendChild(el("div", "hand-prompt", prompt));
 
-  if (sel?.allZones) {
+  if (selCard?.allZones) {
     const cast = el("button", "btn btn-primary", "Cast Everywhere");
-    cast.addEventListener("click", () => commitCard(sel.id, ZONE_IDS[0]!));
+    cast.addEventListener("click", () => commitCard(selCard.id, ZONE_IDS[0]!));
     handWrap.appendChild(cast);
   }
 
@@ -388,12 +659,12 @@ function renderMatch(): void {
   }
   handWrap.appendChild(hand);
   app.appendChild(handWrap);
-  app.appendChild(matchControls());
+  app.appendChild(matchControls(false));
 }
 
-function abilityPanel(): HTMLElement {
-  const p = game.players[HUMAN];
-  const ab = heroDef(humanHeroId).ability;
+function abilityPanel(localHeroId: string): HTMLElement {
+  const p = game!.players[seat];
+  const ab = heroDef(localHeroId).ability;
   const ready = p.abilityReady === 0;
   const wrap = el("div", "ability" + (ready && !armedAbility ? " ability-ready" : ""));
 
@@ -424,33 +695,49 @@ function abilityPanel(): HTMLElement {
   return wrap;
 }
 
-function matchControls(): HTMLElement {
+function matchControls(ended: boolean): HTMLElement {
   const row = el("div", "controls");
-  const result = checkWinCondition(game);
-  if (result) {
-    const again = el("button", "btn btn-primary", "Play again");
-    again.addEventListener("click", startMatch);
-    row.appendChild(again);
-  } else {
-    const pass = el("button", "btn", "Pass turn");
-    pass.addEventListener("click", onPass);
-    if (pending) (pass as HTMLButtonElement).disabled = true;
-    row.appendChild(pass);
+  if (ended) {
+    if (mode === "bot") {
+      const again = el("button", "btn btn-primary", "Play again");
+      again.addEventListener("click", startBotMatch);
+      row.appendChild(again);
+    }
+    const menu = el("button", "btn btn-ghost", "↩ Menu");
+    menu.addEventListener("click", toMenu);
+    row.appendChild(menu);
+    return row;
   }
-  const back = el("button", "btn btn-ghost", "↩ Hero select");
-  back.addEventListener("click", () => {
-    screen = "select";
-    render();
-  });
-  row.appendChild(back);
+  const pass = el("button", "btn", "Pass turn");
+  pass.addEventListener("click", onPass);
+  if (pending) (pass as HTMLButtonElement).disabled = true;
+  row.appendChild(pass);
+  const leave = el("button", "btn btn-ghost", mode === "bot" ? "↩ Hero select" : "↩ Leave match");
+  leave.addEventListener("click", mode === "bot" ? () => { screen = "select"; render(); } : toMenu);
+  row.appendChild(leave);
   return row;
 }
 
 // ---------- dispatch ----------
 
 function render(): void {
-  if (screen === "select") renderSelect();
-  else renderMatch();
+  switch (screen) {
+    case "menu":
+      renderMenu();
+      break;
+    case "select":
+      renderSelect();
+      break;
+    case "join":
+      renderJoin();
+      break;
+    case "lobby":
+      renderLobby();
+      break;
+    case "match":
+      renderMatch();
+      break;
+  }
 }
 
 render();

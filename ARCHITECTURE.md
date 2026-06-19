@@ -124,9 +124,10 @@ When a faction captures a territory (e.g. **Arcane Academy**), every member gain
 | --- | --- | --- |
 | Client | **Phaser 3 + TypeScript** | Purpose-built 2D browser game engine; good sprite/card handling; web-first with no install friction via WebAssembly/Canvas |
 | Native port path | **Capacitor** wrapping the web client | Minimal rework to reach iOS/Android. If it gets real traction, rewrite client in Godot/Unity against the *same* backend |
-| Backend / persistence | **Supabase** | Auth, hero/deck progression, match history, and global map state. Realtime subscriptions drive the territory-conquest layer with little custom infra |
-| Match server | **Colyseus** (Node) on a small VPS | Authoritative state for simultaneous-turn / turn-based play; cheap at prototype scale |
-| Turn validation | **Colyseus** authoritative rooms | Chosen as a service built for real-time multiplayer match state. Supabase Edge Functions considered and rejected as a stopgap — go straight to the purpose-built tool |
+| Backend / persistence | **Fly.io** (Managed Postgres + app services) | Consolidated onto Fly so the whole stack is one provider, one deploy: Postgres holds hero/deck progression, match history, and global map state. The realtime territory-conquest layer rides the same Colyseus server (broadcast, or Redis pub-sub to fan out) rather than a separate realtime service. (Supabase dropped — see §6.) |
+| Match server | **Colyseus** (Node) on **Fly.io** | Authoritative state for simultaneous-turn / turn-based play; cheap at prototype scale. Co-located with Postgres on Fly, so server→DB calls stay in-region |
+| Auth | **TBD — self-hosted on Fly** | A lib (e.g. Lucia) or a small service, so we don't pull a second platform back in. Unchosen; needed at step 3, not before (see §6) |
+| Turn validation | **Colyseus** authoritative rooms | Chosen as a service built for real-time multiplayer match state. Stateless edge-function approaches considered and rejected as a stopgap — go straight to the purpose-built tool |
 | Card art (prototype) | Claude Code-generated ASCII / scaffolding | Fast for layout, card data, logic scaffolding |
 
 ### 4.2 Responsibility split
@@ -136,24 +137,27 @@ When a faction captures a territory (e.g. **Arcane Academy**), every member gain
 │ CLIENT  (Phaser 3 + TS, web → Capacitor)                    │
 │  · Rendering, animation, input                              │
 │  · Local copy of the rules engine for prediction/UI         │
-└───────────────┬───────────────────────────┬────────────────┘
-                │ realtime match traffic     │ persistent state
-                ▼                            ▼
-┌──────────────────────────┐   ┌────────────────────────────┐
-│ COLYSEUS (authoritative)  │   │ SUPABASE                    │
-│  · Match room state       │   │  · Auth / accounts          │
-│  · Simultaneous-turn      │   │  · Decks, heroes, progress  │
-│    lock + resolution      │   │  · Faction map state        │
-│  · Anti-cheat arbitration │   │  · Realtime war subscriptions│
-└───────────┬──────────────┘   └────────────┬───────────────┘
-            │  match result                  │
-            └──────────────►  writes to ◄────┘
-                       faction war tally
+└───────────────────────────┬────────────────────────────────┘
+                            │ ws (match) + http (persistence)
+                            ▼
+┌────────────────────────────────────────────────────────────┐
+│ FLY.IO  — single provider, one deploy, one region           │
+│                                                            │
+│  ┌──────────────────────────┐   ┌───────────────────────┐  │
+│  │ COLYSEUS (authoritative)  │   │ MANAGED POSTGRES       │  │
+│  │  · Match room state       │◄─►│  · Accounts (auth TBD) │  │
+│  │  · Simultaneous-turn      │   │  · Decks, heroes, prog │  │
+│  │    lock + resolution      │   │  · Faction map state   │  │
+│  │  · Anti-cheat arbitration │   │  · Match history       │  │
+│  │  · Realtime war broadcast │   └───────────────────────┘  │
+│  └──────────────────────────┘                              │
+│   in-region DB access; faction war tally written post-match │
+└────────────────────────────────────────────────────────────┘
 ```
 
 The rules engine is **shared code**: the same TypeScript module runs client-side (for responsive UI/prediction) and server-side in Colyseus (as the authority). Authoritative resolution always wins.
 
-### 4.3 Data model (initial sketch — Supabase)
+### 4.3 Data model (initial sketch — Fly Postgres)
 
 - `players` — auth, faction, cosmetics owned
 - `heroes` — archetype definitions (static/seed data)
@@ -163,7 +167,7 @@ The rules engine is **shared code**: the same TypeScript module runs client-side
 - `territories` — persistent map state: owning faction, modifier, capture timer
 - `faction_progress` — rolling contribution toward the next capture
 
-Realtime subscription on `territories` + `faction_progress` powers the live war map without polling.
+The live war map is pushed from the Colyseus server when `territories` / `faction_progress` change — a Colyseus broadcast, with Redis pub-sub if it ever needs to fan out beyond a single node. No separate realtime service (this is the one capability Supabase gave nearly free; Colyseus already being a realtime server is what makes dropping it cheap).
 
 ---
 
@@ -173,10 +177,10 @@ Disciplined sequencing wins (per the second outline); scope targets from the fir
 
 1. **Card resolution engine** — pure TypeScript, console only. 2 decks, 3 zones, 1 territory modifier, 1 win condition. Prove it's fun in ~20 matches. ✅ **Scaffolded** — see [`README.md`](./README.md) and `src/`. Runs via `npm run sim` / `npm run sim:bench`. Balance pass done: Neutral Field ~47/53 (the fix was a *rule* — "strike and seize" spells — not a stat). The mirror lean turned out to be a real engine bug (spells resolving sequentially gave P2 a second-mover edge) — fixed by resolving spells simultaneously against a post-unit snapshot; mirrors now ~47–49%.
 2. **Graphical client (human vs bot)** — drop rendering on top of the validated engine. Local/single-player vs the greedy bot, no backend. ✅ **Scaffolded** as a lightweight Vite + DOM client (`index.html`, `src/web/`); run `npm run dev`. *Note:* DOM rather than Phaser — fastest path to a human in the loop, which is step 2's whole purpose. Phaser/canvas juice layers on later without touching the engine. **No fly.io / Colyseus needed until step 4.**
-3. **Supabase auth + deck persistence** — accounts, save decks.
-4. **Second player** — Colyseus room, networked simultaneous-turn lock/resolution.
+3. **Auth + deck persistence (Fly Postgres)** — accounts, save decks. Auth mechanism still TBD (self-hosted on Fly — a lib like Lucia, or a small service); deferred past the step-4 testing milestone, which needs no persistence.
+4. **Second player** — Colyseus room, networked simultaneous-turn lock/resolution. ⏳ **In progress** — authoritative `CobaRoom` (`server/`) reuses the engine verbatim, server-owned RNG, both-locked resolution, and per-seat **hand redaction** so the opponent's hand never crosses the wire. Room-code matchmaking (host `create` / joiner `join`, `filterBy(['code'])`); client at `src/web/net.ts` + online flow in `src/web/main.ts`. One Fly app serves both the websocket and the built client (`server/index.ts`, `Dockerfile`, `fly.toml`). Still to do: reconnect-into-match, rematch, auto-queue. Persistence (step 3) intentionally skipped for this testing milestone — players are ephemeral.
 5. **Hero abilities + territory modifiers** — expand to the archetype roster. ⏳ **Started early** (pulled forward from playtest feedback that the game needed to be "more dynamic"): each hero now has a free, cooldown-gated signature ability (Warden *Entrench*, Shade *Eviscerate*) playable in the web client. Still to do: more heroes, more territories, ability variety.
-6. **Faction war map** — persistent territory system, realtime subscriptions, capture → card-availability hook. Built **last**, on top of a solid loop.
+6. **Faction war map** — persistent territory system, realtime updates pushed from the Colyseus server, capture → card-availability hook. Built **last**, on top of a solid loop.
 
 Milestone gate between 1 and 2: *do not* render anything until the rules feel good in text.
 
@@ -188,13 +192,15 @@ Most prior questions are now closed (see §1). Remaining:
 
 1. **Monetization detail** — Free-to-play is locked as the *entry model*. The revenue mechanic underneath it (cosmetic-only is the leaning) is not yet confirmed. Resolve before economy/art work.
 2. **Ship art direction** — ASCII stays for the prototype. The launch visual bar is **deferred pending review with the game director** — there are many options worth evaluating together rather than committing now.
+3. **Auth mechanism** — accounts are needed at step 3, but the Fly-hosted implementation is unchosen: a self-hosted lib (e.g. Lucia) vs. a small in-house auth service vs. a third-party identity provider that doesn't drag a second platform back in. Resolve before step-3 persistence work; not needed for the step-4 testing milestone.
 
 ### Recently closed
 
 - ✅ Monetization entry model → **free-to-play**
 - ✅ Platform order → **web → iOS → Android**
-- ✅ Match server → **Colyseus** (purpose-built, not Edge Functions)
+- ✅ Match server → **Colyseus** (purpose-built, not stateless edge functions)
 - ✅ Faction commitment → **seasonal**
+- ✅ Backend / persistence → **consolidated on Fly.io** (Managed Postgres + the Colyseus app); Supabase dropped — one provider, one deploy, in-region DB access, and Colyseus already covers the realtime war map. Trade-off accepted: we now own auth + the data API ourselves (auth mechanism still open, above). ⚠️ Verify Fly Managed Postgres backup/HA maturity before betting progression data on it.
 
 ---
 
