@@ -69,14 +69,14 @@ function runVerbose(): void {
 
 function runBench(): void {
   // Full matrix: every distinct pairing (upper triangle) + mirrors.
-  const roster = ["warden", "shade", "conjurer", "oracle", "magus"];
+  const roster = ["warden", "shade", "conjurer", "oracle", "magus", "blight"];
   const matchups: { a: string; b: string }[] = [];
   for (let i = 0; i < roster.length; i++) {
     for (let j = i; j < roster.length; j++) {
       matchups.push({ a: roster[i]!, b: roster[j]! });
     }
   }
-  const territories = ["neutral_field", "volcanic_forge", "ancient_forest"];
+  const territories = ["neutral_field", "volcanic_forge", "ancient_forest", "narrow_pass"];
   const gamesPer = 1000; // 200 was too noisy (±3.5%) to trust mirror rows; 1000 ≈ ±1.6%
 
   console.log("Balance bench — win rate for P1 (first listed hero)\n");

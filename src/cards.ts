@@ -260,6 +260,62 @@ export const CARDS: Record<string, CardDef> = {
     allZones: true,
     text: "Remove 40% of the enemy's presence in EVERY zone, then add 1 of your own each.",
   },
+
+  // --- Decay archetype: Attrition / Board Decay (grind the enemy off EVERY point).
+  // Added (2026-06-19) from playtest feedback that the roster lacked a hero focused
+  // on decaying enemy positions. Identity is FLAT, board-wide removal that erodes
+  // all three zones each turn — the mirror of the Mage's fractional strip (strong vs
+  // wide/thin presence like the Conjurer, weak vs big concentrated walls). Every
+  // strip seizes a little (selfPresence) so the grind can TAKE cleared ground, not
+  // just deny it; a couple of bodies hold what's been cleared. Stat points reuse the
+  // engine's already-balanced templates (volley / c4-p6 body) — the identity is the
+  // allZones-flat MIX, not new numbers. ---
+  wither: {
+    id: "wither",
+    name: "Wither",
+    cost: 2,
+    kind: "spell",
+    damage: 1,
+    allZones: true,
+    text: "Remove 1 enemy presence from EVERY zone.",
+  },
+  rot: {
+    id: "rot",
+    name: "Rot",
+    cost: 3,
+    kind: "spell",
+    damage: 2,
+    selfPresence: 1,
+    allZones: true,
+    text: "Remove 2 enemy presence and add 1 of your own in EVERY zone.",
+  },
+  canker: {
+    id: "canker",
+    name: "Canker",
+    cost: 3,
+    kind: "spell",
+    damage: 5,
+    selfPresence: 2,
+    text: "Remove 5 enemy presence, then add 2 of your own.",
+  },
+  husk: {
+    id: "husk",
+    name: "Husk",
+    cost: 4,
+    kind: "unit",
+    presence: 6,
+    text: "Add 6 presence to a zone.",
+  },
+  pestilence: {
+    id: "pestilence",
+    name: "Pestilence",
+    cost: 5,
+    kind: "spell",
+    damage: 3,
+    selfPresence: 1,
+    allZones: true,
+    text: "Remove 3 enemy presence and add 1 of your own in EVERY zone.",
+  },
 };
 
 export function cardDef(id: string): CardDef {

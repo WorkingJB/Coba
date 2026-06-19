@@ -1,8 +1,9 @@
 // Starter heroes. Per the architecture, a hero IS a deck archetype, not a skin.
 // Decks are 12 cards. Each has several cheap (≤2) cards so the opening is rarely
 // dead, plus board-wide cards (bastion / volley / swarm) for dynamic swings.
-// Roster (5 — the design target from ARCHITECTURE.md §1): Warden (Tank), Shade
-// (Assassin), Conjurer (Summoner), Oracle (Support), Magus (Mage).
+// Roster: the 5 design-target archetypes from ARCHITECTURE.md §1 — Warden (Tank),
+// Shade (Assassin), Conjurer (Summoner), Oracle (Support), Magus (Mage) — plus a
+// 6th added from playtest feedback: Blight (Attrition / Board Decay).
 
 import type { HeroDef } from "./types.js";
 
@@ -121,6 +122,34 @@ export const HEROES: Record<string, HeroDef> = {
       kind: "removeFoe",
       amount: 3,
       selfPlant: 1,
+      cooldown: 3,
+    },
+  },
+  blight: {
+    id: "blight",
+    name: "The Blight",
+    archetype: "Attrition / Board Decay",
+    // Added from playtest feedback (the roster lacked a hero focused on decaying
+    // enemy positions). Grinds presence off ALL THREE zones with flat, board-wide
+    // removal (wither/rot/pestilence), each strip seizing a little so the decay can
+    // take cleared ground. canker is the single-zone heavy strip to flip a contested
+    // point; recruit/husk are the bodies that hold what's been cleared. Flat removal
+    // is the deliberate mirror of the Magus's fractional strip: strong vs wide/thin
+    // presence (the Conjurer), weak vs big concentrated walls (Warden/Oracle).
+    deck: [
+      "recruit", "recruit",
+      "wither", "wither",
+      "rot", "rot",
+      "canker", "canker",
+      "husk", "husk", "husk",
+      "pestilence",
+    ],
+    ability: {
+      id: "corrode",
+      name: "Corrode",
+      text: "Free: remove 3 enemy presence from a zone.",
+      kind: "removeFoe",
+      amount: 3,
       cooldown: 3,
     },
   },

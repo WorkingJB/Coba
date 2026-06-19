@@ -19,7 +19,7 @@ _Last updated: 2026-06-19._
 | Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
 | Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
 | Auth + persistence | ⏸️ Deferred (intentionally) | — |
-| Hero/territory content | ⏳ 5/5 heroes ✅, 3 territories (≥4 target) | `src/heroes.ts`, `src/territory.ts` |
+| Hero/territory content | ✅ 6 heroes, 4 territories (≥4 target met; both old boards retuned) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
 **⛔ Testing is cloud-only — see [`CLAUDE.md`](./CLAUDE.md) + [`DEPLOY.md`](./DEPLOY.md).** Do not
@@ -36,14 +36,17 @@ typecheck + bench on push is a candidate follow-up if balance work resumes.
 
 ## 🎯 Next steps (start here)
 
-**Finish Step 5 (current focus — 5a done, 5b/5c open):**
-1. **Playtest the 5-hero roster on staging** (https://test.coba.games). The bench bot can't judge
-   *feel* — this is the gap it can't cover. Watch the two new mechanics (Oracle buffs, Magus %
-   removal) for clarity and fun. Feed findings back into tuning.
-2. **5b — Territories:** add ≥1 more to hit the ≥4 target, AND retune **Ancient Forest** so its
-   "+1 presence" stops amplifying `allZones` cards 3× (the Conjurer ~95%-on-Forest issue). This is
-   a *territory* lever (`src/territory.ts`, pure data), deliberately deferred from the hero work.
-3. **5c — Ability variety:** mostly covered (3 ability kinds now). Optional polish, not blocking.
+**Step 5 is essentially complete (5a ✅ 6 heroes, 5b ✅ 4 territories, 5c ✅).** Remaining is
+*human playtest* (feel, not balance — the bench can't judge it) and the exit re-eval:
+1. **Playtest the 6-hero roster on staging** (https://test.coba.games). The bench bot can't judge
+   *feel* — this is the gap it can't cover. Watch the new mechanics (Oracle buffs, Magus % removal),
+   the newest hero **The Blight** (board-wide flat decay; bench-tuned to ~52% overall / a clean RPS
+   loop — **feel out the spicy Blight ~90% vs Magus** and whether it should be softened), and the new
+   **Narrow Pass** board (does the "wide decks get blunted" rule read in play?).
+2. **5b — Territories: ✅ done (2026-06-19).** 4 territories now (added **Narrow Pass**); both old
+   boards retuned to fix the `allZones`-triple bug (Conjurer-on-Forest and Magus/Blight-on-Volcanic).
+   See the 5b section for the verified before/after.
+3. **5c — Ability variety: ✅** covered (3 ability kinds). Optional polish only.
 
 **Then decide sequencing (Step 3 vs Step 6):**
 - **Step 3 — Auth + persistence** is the sequential next build, but **blocked on the auth-mechanism
@@ -67,8 +70,9 @@ typecheck + bench on push is a candidate follow-up if balance work resumes.
 3. ⏸️ **Auth + deck persistence** — *deliberately deferred* past the step-4 testing milestone. Blocked on the auth-mechanism decision (`ARCHITECTURE.md §6.3`).
 4. ✅ **Second player (Colyseus)** — shipped, gaps closed, and now running on a **two-environment
    cloud setup** (staging + prod, custom domains). See the deployment milestone below.
-5. ⏳ **Hero abilities + territory modifiers** — *current focus.* **5a roster ✅ complete (5/5);**
-   5b territories + 5c ability variety remain. Fully enumerated below.
+5. ⏳ **Hero abilities + territory modifiers** — *nearly done.* **5a ✅ 6 heroes** (5 design-target +
+   Blight), **5b ✅ 4 territories** (Narrow Pass added; Forest+Volcanic retuned), **5c ✅** (3 ability
+   kinds). Only human playtest (feel) + the Step-3-vs-6 re-eval remain. Fully enumerated below.
 6. 🔲 **Faction war map** — built last, on the proven loop.
 
 ---
@@ -129,7 +133,7 @@ pairing → simulated drop → reconnect-into-seat → fresh-state delivery → 
 Goal: the **5-archetype starter set** (`ARCHITECTURE.md §1`, ✅ complete), plus territory variety
 and ability-mechanic growth — *without* power creep (territories change rules, not raw power).
 
-### 5a. Hero roster — ✅ 5 of 5 built (complete)
+### 5a. Hero roster — ✅ 5 design-target archetypes + 1 feedback-driven (6 built)
 
 | Archetype (design target) | Hero | Status | Engine fit |
 | --- | --- | --- | --- |
@@ -138,8 +142,45 @@ and ability-mechanic growth — *without* power creep (territories change rules,
 | Summoner — Board Presence | The Conjurer | ✅ **built (2026-06-19)** | pure data — `allZones` units + single-zone bodies, `addSelf` ability |
 | Support — Buffs / Healing | The Oracle | ✅ **built (2026-06-19)** | engine extended — new `buff` card kind + `amplify` ability kind |
 | Mage — Combo / Spell Control | The Magus | ✅ **built (2026-06-19)** | engine extended — `damageFrac` (percentage removal) on spells |
+| _(feedback addition)_ Attrition / Board Decay | The Blight | ✅ **built (2026-06-19)** | pure data — `allZones` flat-removal spells + `removeFoe` ability; reuses existing primitives |
 
-**The roster (5/5) is complete.** Mirror balance is solid across all five heroes (46–49% P1 win,
+**The Blight (built — feedback addition, 2026-06-19):** the roster's 6th hero, added from playtest
+feedback that nothing was focused on *decaying enemy positions*. Built **data-only** (the user's
+explicit call) — no engine or bot changes, since `allZones` flat-removal spells and the `removeFoe`
+ability already exist and the greedy bench bot already evaluates every primitive it uses. Identity is
+**flat, board-wide attrition**: wither/rot/pestilence grind a little presence off *all three* zones
+each turn (each strip seizes via `selfPresence` so the decay can take cleared ground, not just deny);
+canker is the single-zone heavy strip to flip a contested point; recruit/husk are the bodies that
+hold what's cleared. Ability **Corrode** (free: removeFoe 4, +1, cd 3 — a touch more denial than the
+Magus's Nullify). It's the deliberate **flat mirror of the Magus's fractional strip**: by design
+strong vs wide/thin presence (the Conjurer, which lacked a natural predator) and weak vs big
+concentrated walls (Warden/Oracle) — the opposite weakness from the % strip. Stat points reuse
+already-balanced templates (volley ratios, c4-p6 body) to limit balance risk.
+
+**Balance — bench-tuned on staging via `fly ssh … npm run sim:bench` (2026-06-19, cloud runs, no
+local sim per the rule). Four passes:**
+- **v0** (every removal card `allZones` **and** seizing) — universally broken, **90–100% vs the
+  entire roster** (incl. ~99% over the Shade, 100% over the Magus). Confirmed the Magus lesson:
+  board-wide **seize** is the dominant lever, not the removal amount.
+- **v1** — removed seize from `wither`/`pestilence` (pure denial), kept it on `rot`/`canker`, trimmed
+  Corrode to 3/no-plant. Killed the universal dominance, but combined with the territory fixes below
+  (which removed its Volcanic crutch) left it **under-powered & polarized** (~38% overall) — no way to
+  *convert* cleared ground, so flat removal just loses to presence decks.
+- **v2 (final, shipped)** — restored conversion without the cheap-seize cliff: `wither` ×3→×2,
+  `husk` (c4 body) ×2→×3, and the `pestilence` finisher's seize back. **Re-centered to ~52% overall,
+  mirror ~47%** (no seat bias).
+
+**Final identity — a clean RPS hero, not a tier entry.** The Blight *beats the low-presence removal
+decks* (Shade ~81%, Magus ~90%) and *loses to the high-presence decks* (Warden ~32%, Conjurer ~35%,
+~even vs Oracle). That **closes a rock-paper-scissors loop** with the existing spine:
+**Blight → Shade/Magus → Oracle → Warden/Conjurer → Blight**. The design hypothesis *inverted* along
+the way — flat removal can't out-flood a wide Conjurer, so the Blight's real niche is
+**anti-removal/anti-tempo**, not anti-summoner. **⚠️ Spiciest matchup: Blight ~90% over the Magus** —
+high, but within the roster's shipped extremes (Shade 88–99% over Oracle) and part of the RPS loop.
+Flagged to feel out in playtest; soften toward ~70% (trim a body, or give the Magus a hedge) if it
+plays badly.
+
+**The 5 design-target archetypes are complete.** Mirror balance is solid across those five (46–49% P1 win,
 i.e. no seat bias), and most cross-matchups at Neutral Field sit in 43–60%. The deliberate outliers
 form a rock-paper-scissors spine — **Shade > Magus/Oracle**, **Magus > Oracle**, **Oracle > Warden/
 Conjurer** — layered with territory swings (Volcanic Forge favors spell decks, Ancient Forest favors
@@ -209,22 +250,30 @@ the territory (not the hero) during the 5b territory pass.
 bot can play it (`src/bot.ts` heuristics cover the new mechanics), and a `sim:bench` balance
 pass keeps matchups in ~45–55% (no archetype dominates).
 
-### 5b. Territories — 3 built (1 neutral + 2 real)
+### 5b. Territories — ✅ 4 built (hit the ≥4 target; both retunes done) — 2026-06-19
 
 | Territory | Rule | Status |
 | --- | --- | --- |
 | Neutral Field | none | ✅ |
-| Volcanic Forge | spells remove +2 | ✅ |
-| Ancient Forest | units +1 presence | ✅ |
-| _more_ | rules-not-power modifiers | 🔲 add ≥1 to hit the ≥4 target |
-| Ancient Forest (retune) | "+1 presence" amplifies `allZones` 3× | ⚠️ **retune** — Conjurer ~95% on Forest |
+| Volcanic Forge | **single-zone** spells remove +2 (board-wide spells unaffected) | ✅ retuned |
+| Ancient Forest | **single-zone** units +1 presence (board-wide units unaffected) | ✅ retuned |
+| Narrow Pass | `allZones` cards contribute **1 less per zone** — blunts WIDE decks | ✅ **new** |
 
-Each new territory is a `TerritoryDef.modifyCard` in `src/territory.ts` (pure data). Design
-targets: modifiers that interact with the archetypes (e.g. a board that rewards buffs, one that
-blunts board-wide swings, one that favours removal) so content reinforces content. Keep them
-rule-shaped, never +X power in the abstract. **Also retune Ancient Forest** here (its flat "+1 to
-units" triples on `allZones` cards — the Conjurer's degenerate Forest matchup; it's a territory
-lever, not a hero one).
+Each territory is a `TerritoryDef.modifyCard` in `src/territory.ts` (pure data); the client picker and
+server pass-through enumerate `TERRITORIES` automatically, so a new board is data-only. **Done this
+pass:**
+- **Root-cause retune (both old boards).** `modifyCard` runs ONCE then the engine applies the card to
+  every zone, so a *flat per-card* bonus tripled on `allZones` cards — the single bug behind *both*
+  the Conjurer ~95%-on-Forest AND the Magus/Blight ~84–100%-on-Volcanic issues. Fix: flat bonuses now
+  apply only to single-zone cards (`!card.allZones`); board-wide cards are "too diffuse" to get the
+  focused-ground bonus. **Verified:** Shade-vs-Conjurer @ Forest 4.5%→61.7%; Warden-vs-Blight @
+  Volcanic 2.6%→74.8%. The Magus keeps its *focused*-spell Volcanic edge (intended).
+- **New board — Narrow Pass** (the chosen "blunts board-wide swings" identity): `allZones` cards lose
+  1 presence/removal per zone (seize/amplify untouched). It's a hard **counter-board to the WIDE
+  decks** — the Conjurer wins only ~6–17% there, the Blight ~4–18% — without touching focused decks.
+- **Side effect to watch:** the Forest retune gave the **Oracle** a strong home board (focused units
+  +1 amplifies its buffs) — ~74% vs Warden, ~86% vs Conjurer on Forest. Territorial, within norms,
+  noted for a future pass if it grates.
 
 ### 5c. Ability variety — mostly done
 Ability kinds grew from 2 to **3** this session: `addSelf`, `removeFoe`, and `amplify` (the
