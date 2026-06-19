@@ -22,6 +22,17 @@ const app = express();
 app.use(cors()); // dev: client on :5173 reaches matchmaking on :2567
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
+// Canonical host: 301 the apex (coba.games) → www.coba.games, preserving path +
+// query. The prod app serves www, so this just collapses the bare domain onto
+// it. Apex-specific, so coba-246.fly.dev and the staging host are untouched.
+app.use((req, res, next) => {
+  if (req.headers.host?.split(":")[0] === "coba.games") {
+    res.redirect(301, `https://www.coba.games${req.url}`);
+    return;
+  }
+  next();
+});
+
 // Serve the built client in production (dist/ exists after `vite build`).
 // In dev the client is served by Vite and this is simply absent.
 app.use(express.static(DIST));

@@ -39,6 +39,12 @@ A     www     66.241.124.199
 AAAA  www     2a09:8280:1::12f:1c2d:0
 ```
 
+**Apex — `coba.games`** (redirects to www; see below):
+```
+A     @       66.241.124.199
+AAAA  @       2a09:8280:1::12f:1c2d:0
+```
+
 Then check issuance: `fly certs check test.coba.games` and `fly certs check www.coba.games`
 (Let's Encrypt validates automatically once DNS resolves; usually a few minutes).
 
@@ -47,4 +53,7 @@ Notes:
   auto-track IP changes; the A/AAAA above are Fly's recommended setup.
 - The IPs above are Fly **shared** addresses (routing is by SNI/Host + the cert, so shared is
   fine). For a stable prod IP you can later allocate a dedicated one: `fly ips allocate-v4 -a coba-246`.
-- Apex `coba.games` → `www` redirect is not set up yet (deferred; out of scope until needed).
+- Apex `coba.games` → `www.coba.games` redirect **is set up** (301, path + query preserved). It's
+  an app-level redirect in `server/index.ts` (keyed on the `coba.games` Host), not DNS — so the
+  apex must point A/AAAA at the prod app (records above) and have its own cert (`fly certs add
+  coba.games -a coba-246`, already done) for the HTTPS redirect to fire.
