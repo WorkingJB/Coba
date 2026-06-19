@@ -136,26 +136,51 @@ body {
 .pip-you { color: var(--you); }
 .pip-bot { color: var(--bot); }
 .zone-ctrl { font-size: 11px; color: var(--muted); }
-.zone-side { display: flex; align-items: center; gap: 6px; font-size: 13px; }
-.zone-side.you { color: var(--you); }
-.zone-side.bot { color: var(--bot); justify-content: flex-end; }
-.zone-side .num { min-width: 20px; font-weight: bold; }
-.bargraph { letter-spacing: -1px; }
+/* tug-of-war presence bar (replaces the ASCII bargraph; scales to any width) */
+.tug {
+  display: flex; height: 12px; margin-top: 2px;
+  border-radius: 6px; overflow: hidden;
+  background: var(--bg); border: 1px solid var(--line);
+}
+.tug-you { background: var(--you); transition: width 0.3s ease; }
+.tug-bot { background: var(--bot); transition: width 0.3s ease; }
+.zone-nums { display: flex; align-items: center; justify-content: space-between; font-size: 14px; }
+.zone-nums .num { font-weight: bold; }
+.zone-nums .num.you { color: var(--you); }
+.zone-nums .num.bot { color: var(--bot); }
+.zone-vs { color: var(--muted); font-size: 10px; }
 
-/* ---- log ---- */
-.log {
+/* ---- last-turn reveal (what each side just played + its impact) ---- */
+.lastplay {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
   min-height: 56px;
-  font-size: 12px;
 }
-.log-head { color: var(--muted); letter-spacing: 2px; font-size: 10px; margin-bottom: 4px; }
-.log-line { color: var(--text); }
-.log-line.you { color: var(--you); }
-.log-line.bot { color: var(--bot); }
+.lastplay-head { color: var(--muted); letter-spacing: 2px; font-size: 10px; margin-bottom: 8px; }
+.lastplay-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.lastplay-col { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding-left: 8px; }
+.lastplay-col.you { border-left: 3px solid var(--you); }
+.lastplay-col.opp { border-left: 3px solid var(--bot); }
+.lastplay-who { font-size: 11px; font-weight: bold; letter-spacing: 1px; }
+.lastplay-col.you .lastplay-who { color: var(--you); }
+.lastplay-col.opp .lastplay-who { color: var(--bot); }
+.lastplay-col .card { width: 100%; cursor: default; }
+.lastplay-col .card:hover { transform: none; border-color: var(--line); }
+.lastplay-ability { font-size: 12px; font-weight: bold; color: var(--spell); }
+.lastplay-impact { font-size: 11px; color: var(--muted); }
+.lastplay-pass { font-style: italic; }
 .muted { color: var(--muted); }
+
+/* ---- opponent deck panel (in-match, public info) ---- */
+.oppdeck-toggle { align-self: flex-start; }
+.oppdeck {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
 
 /* ---- reveal beat ---- */
 .resolving {
@@ -301,7 +326,17 @@ body {
 .lobby-dots { color: var(--accent); letter-spacing: 4px; animation: pulse 1.2s ease-in-out infinite; }
 
 @media (max-width: 620px) {
-  .hero-choice, .zones { grid-template-columns: 1fr; }
+  .hero-choice { grid-template-columns: 1fr; }
+  /* Keep the three zones side-by-side as real lanes (don't stack), just compact. */
+  .zones { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  .zone { padding: 7px; gap: 4px; }
+  .zone-name { letter-spacing: 1px; font-size: 12px; }
+  .zone-pip { font-size: 8px; }
+  .zone-ctrl { font-size: 9px; }
+  .zone-nums { font-size: 13px; }
+  .zone-vs { display: none; }
+  /* Stack the YOU/OPP reveal so each played card gets full width. */
+  .lastplay-cols { grid-template-columns: 1fr; }
   .card { width: calc(50% - 5px); }
   .btn-big { margin-left: 0; }
 }

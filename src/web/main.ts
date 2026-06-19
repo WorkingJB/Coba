@@ -6,7 +6,7 @@
 
 import { initGame, resolveTurn, checkWinCondition } from "../engine.js";
 import { chooseAction } from "../bot.js";
-import { cardDef } from "../cards.js";
+import { cardDef, CARDS } from "../cards.js";
 import { heroDef, HERO_IDS } from "../heroes.js";
 import { territoryDef, TERRITORIES } from "../territory.js";
 import { makeRng, type Rng } from "../rng.js";
@@ -48,6 +48,7 @@ let selectedCard: string | null = null;
 let armedAbility: ZoneId | null = null; // hero ability aimed for this turn
 let abilityTargeting = false; // currently choosing a zone for the ability
 let lastLogLen = 0;
+let showOppDeck = false; // match: opponent deck library expanded (decks are public)
 let pending: { human: PlannedAction; bot: PlannedAction | null } | null = null;
 let prevPoints: Record<PlayerId, number> = { P1: 0, P2: 0 };
 let lastGain: Record<PlayerId, number> = { P1: 0, P2: 0 };
@@ -83,6 +84,7 @@ function startBotMatch(): void {
 function resetMatchUi(): void {
   clearSelections();
   lastLogLen = 0;
+  showOppDeck = false;
   pending = null;
   oppLocked = false;
   oppLeft = false;
@@ -350,9 +352,84 @@ function el(tag: string, className?: string, text?: string): HTMLElement {
   return e;
 }
 
-function bar(value: number, max: number, glyph: string): string {
-  const n = max <= 0 ? 0 : Math.round((value / max) * 12);
-  return glyph.repeat(Math.min(12, n));
+/** Tug-of-war presence bar: green (you) vs red (opp), proportional, fits any width. */
+function tugBar(youP: number, botP: number): HTMLElement {
+  const total = Math.max(youP + botP, 1);
+  const youPct = Math.round((youP / total) * 100);
+  const wrap = el("div", "tug");
+  const y = el("div", "tug-you");
+  y.style.width = `${youP === 0 ? 0 : youPct}%`;
+  const b = el("div", "tug-bot");
+  b.style.width = `${botP === 0 ? 0 : 100 - youPct}%`;
+  wrap.appendChild(y);
+  wrap.appendChild(b);
+  return wrap;
+}
+
+// ---- "what just happened" reveal: recover plays from the (shared, authoritative)
+// engine log. Card/ability names are unique, so the name → id map is lossless, and
+// this works identically in bot and online mode (same log format) with no protocol
+// change. Opponent plays ARE public (they're in the log); only the hand is redacted.
+const cardByName = new Map(Object.values(CARDS).map((c) => [c.name, c.id] as const));
+
+interface TurnPlay {
+  player: PlayerId;
+  cardId: string | null; // the card played this line, if any
+  abilityName: string | null; // the ability fired this line, if any
+  target: string; // zone id or "ALL zones"
+  impact: string; // the "(…)" detail straight from the log (the numeric effect)
+  passed: boolean;
+}
+
+function parseTurnPlays(lines: string[]): TurnPlay[] {
+  const out: TurnPlay[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    let m = line.match(/^(P1|P2) (?:plays|casts) (.+?) → (.+?) \((.+)\)\.?$/);
+    if (m) {
+      out.push({ player: m[1] as PlayerId, cardId: cardByName.get(m[2]!) ?? null, abilityName: null, target: m[3]!, impact: m[4]!, passed: false });
+      continue;
+    }
+    m = line.match(/^(P1|P2) uses (.+?) → (.+?) \((.+)\)\.?$/);
+    if (m) {
+      out.push({ player: m[1] as PlayerId, cardId: null, abilityName: m[2]!, target: m[3]!, impact: m[4]!, passed: false });
+      continue;
+    }
+    if (/^(P1|P2) passes\.$/.test(line) || /^(P1|P2) (?:tried to play|can't afford)/.test(line)) {
+      out.push({ player: line.slice(0, 2) as PlayerId, cardId: null, abilityName: null, target: "", impact: "", passed: true });
+    }
+  }
+  return out;
+}
+
+/** The "LAST TURN" panel: each side's actual played card + its numeric impact. */
+function lastPlaysPanel(): HTMLElement {
+  const plays = parseTurnPlays(game!.log.slice(lastLogLen));
+  const panel = el("div", "lastplay");
+  panel.appendChild(el("div", "lastplay-head", "LAST TURN"));
+  if (plays.length === 0) {
+    panel.appendChild(el("div", "muted", game!.turn === 1 ? "Match start — make your move." : "Your move — pick a card."));
+    return panel;
+  }
+  const cols = el("div", "lastplay-cols");
+  for (const who of [seat, foe()]) {
+    const mine = who === seat;
+    const col = el("div", "lastplay-col " + (mine ? "you" : "opp"));
+    col.appendChild(el("div", "lastplay-who", mine ? "YOU" : `${oppLabel()} · ${heroDef(game!.players[who].heroId).name}`));
+    const acts = plays.filter((p) => p.player === who && (p.cardId || p.abilityName));
+    if (acts.length === 0) {
+      col.appendChild(el("div", "lastplay-pass muted", "— passed —"));
+    } else {
+      for (const p of acts) {
+        if (p.cardId) col.appendChild(cardEl(p.cardId, { mini: true }));
+        else col.appendChild(el("div", "lastplay-ability", `✦ ${p.abilityName}`));
+        col.appendChild(el("div", "lastplay-impact", `→ ${p.target} · ${p.impact}`));
+      }
+    }
+    cols.appendChild(col);
+  }
+  panel.appendChild(cols);
+  return panel;
 }
 
 function deckGroups(heroId: string): { id: string; count: number }[] {
@@ -633,6 +710,22 @@ function renderMatch(): void {
   score.appendChild(botScore);
   app.appendChild(score);
 
+  // Opponent deck (public info — same library shown at hero-select). Lets a player
+  // learn what they're up against, per playtest feedback.
+  const oppHero = heroDef(bot.heroId);
+  const deckToggle = el("button", "btn btn-ghost btn-sm oppdeck-toggle",
+    `${showOppDeck ? "▾" : "▸"} ${oppLabel()}'s deck — ${oppHero.name} (${oppHero.archetype})`);
+  deckToggle.addEventListener("click", () => { showOppDeck = !showOppDeck; render(); });
+  app.appendChild(deckToggle);
+  if (showOppDeck) {
+    const panel = el("div", "oppdeck");
+    panel.appendChild(el("div", "lib-label", `DECK LIBRARY (${oppHero.deck.length} cards)`));
+    const lib = el("div", "lib");
+    for (const g of deckGroups(bot.heroId)) lib.appendChild(cardEl(g.id, { count: g.count, mini: true }));
+    panel.appendChild(lib);
+    app.appendChild(panel);
+  }
+
   // Zones.
   const zonesEl = el("div", "zones");
   for (const z of ZONE_IDS) {
@@ -647,30 +740,18 @@ function renderMatch(): void {
     zone.appendChild(nameRow);
     const ctrlLabel = ctrl === "you" ? "YOU control" : ctrl === "bot" ? `${oppLabel()} controls` : "contested";
     zone.appendChild(el("div", "zone-ctrl", ctrlLabel));
-    const max = Math.max(youP, botP, 1);
-    const you = el("div", "zone-side you");
-    you.innerHTML = `<span class="num">${youP}</span> <span class="bargraph">${bar(youP, max, "▰")}</span>`;
-    const bo = el("div", "zone-side bot");
-    bo.innerHTML = `<span class="bargraph">${bar(botP, max, "▰")}</span> <span class="num">${botP}</span>`;
-    zone.appendChild(you);
-    zone.appendChild(bo);
+    zone.appendChild(tugBar(youP, botP));
+    const nums = el("div", "zone-nums");
+    nums.innerHTML = `<span class="num you">${youP}</span><span class="zone-vs">vs</span><span class="num bot">${botP}</span>`;
+    zone.appendChild(nums);
     if (targetable) zone.addEventListener("click", () => onPickZone(z));
     zonesEl.appendChild(zone);
   }
   app.appendChild(zonesEl);
 
-  // Action log — relabelled to the local player's perspective.
-  const logEl = el("div", "log");
-  logEl.appendChild(el("div", "log-head", "LAST TURN"));
-  const relabel = (l: string) => l.replaceAll(me, "YOU").replaceAll(opp, oppLabel());
-  const isPlay = (l: string) => /plays|casts|passes|uses|afford|in hand/.test(l);
-  const lines = game.log.slice(lastLogLen).filter(isPlay);
-  if (lines.length === 0) logEl.appendChild(el("div", "log-line muted", "Your move — pick a card."));
-  for (const line of lines) {
-    const cls = line.includes(me) ? "log-line you" : line.includes(opp) ? "log-line bot" : "log-line";
-    logEl.appendChild(el("div", cls, relabel(line.trim())));
-  }
-  app.appendChild(logEl);
+  // "Last turn" reveal — shows each side's actual played card + numeric impact,
+  // so a player can see what the opponent did and understand its effect.
+  app.appendChild(lastPlaysPanel());
 
   // Our own connection dropped — board is stale, block play until we're back.
   if (reconnecting) {
