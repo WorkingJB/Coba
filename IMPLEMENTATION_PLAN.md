@@ -80,6 +80,24 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 
 ---
 
+## ✅ Recently completed — Client UX from playtest (2026-06-19)
+
+Two pieces of human-playtest feedback on the web client (`src/web/`), both fixed **client-only**
+(no engine/server/protocol change), CI-verified, live on staging:
+
+- **"Can't tell what the opponent just played / what's in their deck."** The "LAST TURN" panel now
+  renders each side's *actual played card* as a visual + its numeric impact, recovered losslessly
+  from the shared authoritative engine log (unique card/ability names → ids; works identically in
+  bot and online mode — opponent plays are already public in the log, only the hand is redacted).
+  Plus an in-match **opponent-deck toggle** showing the foe's full 12-card library (public info —
+  the hero id is sent un-redacted).
+- **"Mobile looks weird — lanes stacked."** The `@media` rule was collapsing the three zones into a
+  vertical stack; now they stay **side-by-side as real lanes**, compacted, and the overflow-prone
+  ASCII bargraph is replaced by a **tug-of-war presence bar** (also cleaner on desktop).
+
+> Visual/mobile rendering still wants a human eye on a real device (I can't see a browser) — verify
+> on test.coba.games. The build/typecheck/bench are green.
+
 ## ✅ Recently completed — Cloud environments & deploy (2026-06-19)
 
 Stood up a proper two-environment cloud setup on Fly.io, and made **cloud the only place we test**
