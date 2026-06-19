@@ -1,9 +1,19 @@
-# Coba — Engine Prototype
+# Coba — Prototype
 
-Build Sequence **step 1** from [`ARCHITECTURE.md`](./ARCHITECTURE.md): the pure
-card-resolution engine, console only, no graphics. The goal of this step is to
-**prove the loop is fun in ~20 matches** before any Phaser or Colyseus code
-exists.
+A 2v2 hero-based tactical card battler (see [`ARCHITECTURE.md`](./ARCHITECTURE.md) for
+the full design). This repo has progressed through **Build Sequence step 4** of that doc:
+
+| Step | What | Status |
+| --- | --- | --- |
+| 1 | Pure card-resolution engine (console only) | ✅ `src/`, `npm run sim` |
+| 2 | Browser client, human vs bot (DOM, no backend) | ✅ `src/web/`, `npm run dev` |
+| 3 | Auth + deck persistence | ⏳ deferred (not needed for testing) |
+| 4 | Networked human-vs-human (Colyseus, room codes) | ✅ **live at https://coba-246.fly.dev** |
+| 5 | Hero abilities + territory modifiers | ⏳ started early |
+| 6 | Faction war map | — last |
+
+The engine is the shared authority: the **same** `src/engine.ts` runs in the console
+simulator, the local bot client, and server-side in Colyseus.
 
 ## Run it
 
@@ -11,7 +21,9 @@ exists.
 npm install
 npm run sim          # one verbose match, turn by turn
 npm run sim:bench    # 200 matches per matchup/territory, prints win rates
-npm run typecheck    # tsc --noEmit
+npm run dev          # browser client (vs bot), no backend
+npm run server       # + Colyseus match server (for local human-vs-human)
+npm run typecheck    # tsc --noEmit (covers src/ and server/)
 ```
 
 ## What's modeled
@@ -104,11 +116,25 @@ engine (the engine stays the shared authority).
 
 ## Multiplayer (step 4) — human vs human
 
+**Live at https://coba-246.fly.dev** — open it in two places, one **Create Room**, one
+**Join Room** with the shared code.
+
 An authoritative [Colyseus](https://colyseus.io) server (`server/`) reuses the **same**
 `src/engine.ts` as the simulator and bot client — resolution only ever happens on the
 server. Players match via a short **room code** (host creates, opponent joins). The
 server owns the RNG and **redacts each player's view** so the opponent's hand never
 crosses the wire. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.
+
+### Protocol (client ⇄ server)
+
+| Message | Dir | Payload |
+| --- | --- | --- |
+| `seat` | →client | `{ seat, code }` — which side you control |
+| `lobby` | →client | `{ code, players, heroes, territory }` |
+| `state` | →client | `{ state, result, seat }` — full **redacted** `GameState` after each resolve |
+| `locked` | →client | `{ seat }` — opponent locked (never *what* they locked) |
+| `opponentLeft` | →client | match ended early |
+| `lock` | →server | a `PlannedAction`; server resolves once **both** seats have locked |
 
 ### Run it locally (two terminals)
 
@@ -130,14 +156,33 @@ runs entirely client-side with no server.
 ### Deploy to Fly.io (over-the-internet testing)
 
 One app serves both the websocket traffic and the built client. The `Dockerfile` runs
-`vite build` then `npm run start`.
+`vite build` then `npm run start`. Already provisioned: app **`coba-246`** in org
+`coba-246`, region `iad`.
 
 ```bash
-fly launch --no-deploy   # first time: claims a unique app name, writes/keeps fly.toml
-fly deploy               # build image, ship it
-fly open                 # open the deployed client
+fly deploy --ha=false    # build image + ship as a SINGLE machine
+fly logs                 # tail server output
+fly open                 # open https://coba-246.fly.dev
 ```
 
-`fly.toml` keeps one machine warm (`min_machines_running = 1`) so a live match isn't
-killed mid-game; flip that off to cut idle cost once test windows are predictable.
+> **`--ha=false` is required.** Match rooms are in-memory, so both players must hit the
+> same instance. Fly's default deploy creates two machines, which would split rooms
+> across nodes; scaling past one machine needs the Colyseus Redis driver (see
+> `ARCHITECTURE.md` §4), not a config change.
+
+`fly.toml` keeps one machine warm (`auto_stop_machines = false`, `min_machines_running = 1`)
+so a live match isn't killed mid-game — a small continuous cost. Between test windows:
+
+```bash
+fly machine stop -a coba-246     # idle it to stop billing for compute
+fly machine start -a coba-246    # bring it back before a session
+```
+
 No database or secrets are needed for this milestone — persistence is step 3.
+
+#### First-time setup (already done — for reference)
+
+```bash
+fly apps create coba-246 --org coba-246   # create the app in the project org
+fly deploy --ha=false                     # initial deploy
+```

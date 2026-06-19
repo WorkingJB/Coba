@@ -169,6 +169,14 @@ The rules engine is **shared code**: the same TypeScript module runs client-side
 
 The live war map is pushed from the Colyseus server when `territories` / `faction_progress` change — a Colyseus broadcast, with Redis pub-sub if it ever needs to fan out beyond a single node. No separate realtime service (this is the one capability Supabase gave nearly free; Colyseus already being a realtime server is what makes dropping it cheap).
 
+### 4.4 Current deployment
+
+The step-4 milestone is **live**. A single Fly machine (app **`coba-246`**, org `coba-246`, region `iad`, `shared-cpu-1x` / 256 MB) runs the Colyseus server and serves the built client at **https://coba-246.fly.dev**.
+
+- **One machine, deliberately.** Match rooms are in-memory, so both players must land on the same instance. Deploy with `fly deploy --ha=false`; `fly.toml` pins `min_machines_running = 1` / `auto_stop_machines = false` so live matches aren't stopped mid-game. Scaling to multiple machines is a Colyseus Redis-driver change (the presence/driver this doc already anticipates for the war map), not a config flip.
+- **No persistence or secrets** yet — players are ephemeral (step 3 deferred).
+- **Cost note:** the always-on machine bills continuously; `fly machine stop -a coba-246` idles it between test windows.
+
 ---
 
 ## 5. Build Sequence
@@ -178,7 +186,7 @@ Disciplined sequencing wins (per the second outline); scope targets from the fir
 1. **Card resolution engine** — pure TypeScript, console only. 2 decks, 3 zones, 1 territory modifier, 1 win condition. Prove it's fun in ~20 matches. ✅ **Scaffolded** — see [`README.md`](./README.md) and `src/`. Runs via `npm run sim` / `npm run sim:bench`. Balance pass done: Neutral Field ~47/53 (the fix was a *rule* — "strike and seize" spells — not a stat). The mirror lean turned out to be a real engine bug (spells resolving sequentially gave P2 a second-mover edge) — fixed by resolving spells simultaneously against a post-unit snapshot; mirrors now ~47–49%.
 2. **Graphical client (human vs bot)** — drop rendering on top of the validated engine. Local/single-player vs the greedy bot, no backend. ✅ **Scaffolded** as a lightweight Vite + DOM client (`index.html`, `src/web/`); run `npm run dev`. *Note:* DOM rather than Phaser — fastest path to a human in the loop, which is step 2's whole purpose. Phaser/canvas juice layers on later without touching the engine. **No fly.io / Colyseus needed until step 4.**
 3. **Auth + deck persistence (Fly Postgres)** — accounts, save decks. Auth mechanism still TBD (self-hosted on Fly — a lib like Lucia, or a small service); deferred past the step-4 testing milestone, which needs no persistence.
-4. **Second player** — Colyseus room, networked simultaneous-turn lock/resolution. ⏳ **In progress** — authoritative `CobaRoom` (`server/`) reuses the engine verbatim, server-owned RNG, both-locked resolution, and per-seat **hand redaction** so the opponent's hand never crosses the wire. Room-code matchmaking (host `create` / joiner `join`, `filterBy(['code'])`); client at `src/web/net.ts` + online flow in `src/web/main.ts`. One Fly app serves both the websocket and the built client (`server/index.ts`, `Dockerfile`, `fly.toml`). Still to do: reconnect-into-match, rematch, auto-queue. Persistence (step 3) intentionally skipped for this testing milestone — players are ephemeral.
+4. **Second player** — Colyseus room, networked simultaneous-turn lock/resolution. ✅ **Shipped & deployed — live at https://coba-246.fly.dev** (see §4.4). Authoritative `CobaRoom` (`server/`) reuses the engine verbatim, server-owned RNG, both-locked resolution, and per-seat **hand redaction** so the opponent's hand never crosses the wire. Room-code matchmaking (host `create` / joiner `join`, `filterBy(['code'])`); client at `src/web/net.ts` + online flow in `src/web/main.ts`. One Fly app serves both the websocket and the built client (`server/index.ts`, `Dockerfile`, `fly.toml`); verified end-to-end over `wss` (two clients, authoritative resolve, redaction). Still to do: reconnect-into-match, rematch, auto-queue. Persistence (step 3) intentionally skipped for this testing milestone — players are ephemeral.
 5. **Hero abilities + territory modifiers** — expand to the archetype roster. ⏳ **Started early** (pulled forward from playtest feedback that the game needed to be "more dynamic"): each hero now has a free, cooldown-gated signature ability (Warden *Entrench*, Shade *Eviscerate*) playable in the web client. Still to do: more heroes, more territories, ability variety.
 6. **Faction war map** — persistent territory system, realtime updates pushed from the Colyseus server, capture → card-availability hook. Built **last**, on top of a solid loop.
 
