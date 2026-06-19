@@ -29,10 +29,13 @@ npm run typecheck    # tsc --noEmit (covers src/ and server/)
 ## What's modeled
 
 - **1v1, three control points** (LEFT / CORE / RIGHT). Hold a zone at end of turn → +1 point. First to 12 (or most at the turn cap) wins.
-- **Simultaneous resolution.** Both players' locked actions resolve together each turn: units deploy first, then spells (against a shared snapshot), then scoring.
-- **Hero = archetype.** Two starter heroes, each a 12-card deck with a real curve (multiple cheap plays so turn 1 isn't dead), a board-wide card, and a signature ability:
+- **Simultaneous resolution.** Both players' locked actions resolve together each turn: units deploy first, then buffs amplify, then spells (against a shared snapshot), then hero abilities, then scoring.
+- **Hero = archetype.** Five starter heroes (the full design-target roster), each a 12-card deck with a real curve (multiple cheap plays so turn 1 isn't dead), a board-wide card, and a signature ability:
   - **The Warden** — Defense / Zone Control (durable units; `bastion` reinforces every zone; ability **Entrench**: free +5 presence to a zone)
   - **The Shade** — Burst / Tempo (cheap units, removal that seizes; `volley` hits every zone; ability **Eviscerate**: free remove 4 + plant 2 in a zone)
+  - **The Conjurer** — Summon / Board Presence (goes wide; `swarm`/`conjure`/`legion` spread presence across every zone; ability **Manifest**: free +4 presence to a zone). No removal — strong on Ancient Forest, weak on Volcanic Forge.
+  - **The Oracle** — Support / Buffs (banks presence with bodies, then `buff` cards add flat presence *and* amplify the zone by 40%; ability **Rally**: free +2 then +40% in a zone). A force multiplier for *flipping contested zones* — hard-countered by removal.
+  - **The Magus** — Arcane / Spell Control (percentage removal: `unravel`/`disjunction` strip 40% of a zone — or *every* zone — the answer to big stacks; ability **Nullify**: free remove 3 + plant 1). Dominant on Volcanic Forge, weak on Ancient Forest.
 - **Hero abilities** are free, cooldown-gated (4 turns) signature moves you fire *alongside* your card for big "burst turns" — the main dynamism lever.
 - **`allZones` cards** apply their effect to all three zones at once — big board-wide swings.
 - **Guaranteed playable opening** — the opening hand always contains a turn-1-castable card.

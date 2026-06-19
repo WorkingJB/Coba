@@ -12,19 +12,30 @@ export function opponentOf(p: PlayerId): PlayerId {
   return p === "P1" ? "P2" : "P1";
 }
 
-/** A card definition. `unit` adds presence to a zone; `spell` removes enemy presence. */
+/**
+ * A card definition.
+ * - `unit` adds presence to a zone.
+ * - `spell` removes enemy presence (and may plant some of the caster's own).
+ * - `buff` amplifies the caster's CURRENT presence in the zone by `amplify`
+ *   (a fraction, e.g. 0.5 = +50%). Does nothing on an empty zone — it scales
+ *   what's already there, so it rewards concentration and flips contested zones.
+ */
 export interface CardDef {
   id: string;
   name: string;
   /** Energy cost to play. */
   cost: number;
-  kind: "unit" | "spell";
+  kind: "unit" | "spell" | "buff";
   /** Units: presence contributed to the target zone. */
   presence?: number;
-  /** Spells: presence removed from the opponent in the target zone. */
+  /** Spells: flat presence removed from the opponent in the target zone. */
   damage?: number;
+  /** Spells: fraction of the opponent's current zone presence ALSO removed (0.5 = -50%). Scales vs big stacks. */
+  damageFrac?: number;
   /** Spells: presence the caster also plants in the zone (lets removal TAKE ground, not just deny). */
   selfPresence?: number;
+  /** Buffs: fraction of the caster's current presence in the zone to add (0.5 = +50%). */
+  amplify?: number;
   /** If true, the card's effect applies to ALL zones at once (board-wide swing). Target zone is ignored. */
   allZones?: boolean;
   text: string;
@@ -35,11 +46,17 @@ export interface AbilityDef {
   id: string;
   name: string;
   text: string;
-  /** `addSelf` plants the caster's presence; `removeFoe` strips the opponent's. */
-  kind: "addSelf" | "removeFoe";
+  /**
+   * `addSelf` plants flat presence; `removeFoe` strips the opponent's;
+   * `amplify` scales the caster's current presence in the zone by `amplify`.
+   */
+  kind: "addSelf" | "removeFoe" | "amplify";
+  /** Flat presence added/removed for `addSelf` / `removeFoe`. */
   amount: number;
   /** For `removeFoe`: presence the caster also plants (lets the strike TAKE ground, not just deny). */
   selfPlant?: number;
+  /** For `amplify`: fraction of the caster's current zone presence to add (0.5 = +50%). */
+  amplify?: number;
   /** Turns before it can be used again after firing. */
   cooldown: number;
 }

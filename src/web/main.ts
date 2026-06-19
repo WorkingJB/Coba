@@ -365,7 +365,7 @@ function deckGroups(heroId: string): { id: string; count: number }[] {
 
 function cardEl(id: string, opts: { count?: number; mini?: boolean } = {}): HTMLElement {
   const def = cardDef(id);
-  const card = el("div", "card" + (def.kind === "spell" ? " card-spell" : " card-unit") + (opts.mini ? " card-mini" : ""));
+  const card = el("div", "card" + ` card-${def.kind}` + (opts.mini ? " card-mini" : ""));
   card.appendChild(el("div", "card-cost", String(def.cost)));
   if (opts.count && opts.count > 1) card.appendChild(el("div", "card-count", `×${opts.count}`));
   card.appendChild(el("div", "card-name", def.name));

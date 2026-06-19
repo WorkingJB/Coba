@@ -34,8 +34,12 @@ function scoreAction(state: GameState, action: PlannedAction): number {
     for (const z of targets) {
       if (card.kind === "unit") {
         pres[z].me += card.presence ?? 0;
+      } else if (card.kind === "buff") {
+        const after = pres[z].me + (card.presence ?? 0);
+        pres[z].me = after + Math.floor(after * (card.amplify ?? 0));
       } else {
-        pres[z].foe = Math.max(0, pres[z].foe - (card.damage ?? 0));
+        const rem = (card.damage ?? 0) + Math.floor(pres[z].foe * (card.damageFrac ?? 0));
+        pres[z].foe = Math.max(0, pres[z].foe - rem);
         pres[z].me += card.selfPresence ?? 0;
       }
     }
@@ -69,6 +73,9 @@ function bestAbilityZone(state: GameState, player: PlayerId): ZoneId | null {
       if (z === target) {
         if (ability.kind === "addSelf") {
           me += ability.amount;
+        } else if (ability.kind === "amplify") {
+          const after = me + ability.amount;
+          me = after + Math.floor(after * (ability.amplify ?? 0));
         } else {
           fo = Math.max(0, fo - ability.amount);
           me += ability.selfPlant ?? 0;

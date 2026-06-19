@@ -197,6 +197,28 @@ export function resolveTurn(
     }
   }
 
+  // Phase 1b — buffs reinforce then amplify the caster's own presence. They add
+  // flat `presence` first (so a buff is never dead on an empty zone — the fix for
+  // the Support death-spiral) and THEN scale the result by `amplify`, rewarding a
+  // base built on prior turns. Each player reads only their own presence, so the
+  // order between the two players is irrelevant.
+  for (const r of plays) {
+    if (r.card.kind !== "buff") continue;
+    const flat = r.card.presence ?? 0;
+    const factor = r.card.amplify ?? 0;
+    const targets = r.card.allZones ? ZONE_IDS : [r.zone];
+    let addedTotal = 0;
+    for (const z of targets) {
+      const before = s.zones[z].presence[r.player];
+      const after = before + flat;
+      const amplified = after + Math.floor(after * factor);
+      s.zones[z].presence[r.player] = amplified;
+      addedTotal += amplified - before;
+    }
+    const where = r.card.allZones ? "ALL zones" : r.zone;
+    s.log.push(`  ${r.player} plays ${r.card.name} → ${where} (+${addedTotal} presence; +${flat} then +${Math.round(factor * 100)}%).`);
+  }
+
   // Phase 2 — spells resolve SIMULTANEOUSLY. Every removal is computed against a
   // snapshot taken AFTER units deploy but BEFORE any spell, so neither player can
   // react to the other's same-turn spell. (A live read here gave P2 a hidden
@@ -212,7 +234,10 @@ export function resolveTurn(
     const targets = r.card.allZones ? ZONE_IDS : [r.zone];
     let removedTotal = 0;
     for (const z of targets) {
-      const removed = Math.min(snapshot[z][foe], r.card.damage ?? 0);
+      // Flat removal + a fraction of what's there (the Mage's anti-stack control).
+      // Both read the post-unit snapshot, so neither reacts to a same-turn spell.
+      const want = (r.card.damage ?? 0) + Math.floor(snapshot[z][foe] * (r.card.damageFrac ?? 0));
+      const removed = Math.min(snapshot[z][foe], want);
       s.zones[z].presence[foe] = Math.max(0, s.zones[z].presence[foe] - removed);
       s.zones[z].presence[r.player] += planted;
       removedTotal += removed;
@@ -239,6 +264,13 @@ export function resolveTurn(
     if (ability.kind === "addSelf") {
       s.zones[a.ability].presence[a.player] += ability.amount;
       s.log.push(`  ${a.player} uses ${ability.name} → ${a.ability} (+${ability.amount} presence).`);
+    } else if (ability.kind === "amplify") {
+      const factor = ability.amplify ?? 0;
+      const before = s.zones[a.ability].presence[a.player];
+      const after = before + ability.amount; // flat reinforce, then amplify
+      s.zones[a.ability].presence[a.player] = after + Math.floor(after * factor);
+      const add = s.zones[a.ability].presence[a.player] - before;
+      s.log.push(`  ${a.player} uses ${ability.name} → ${a.ability} (+${add} presence; +${ability.amount} then +${Math.round(factor * 100)}%).`);
     } else {
       const foe = opponentOf(a.player);
       const removed = Math.min(abilitySnap[a.ability][foe], ability.amount);

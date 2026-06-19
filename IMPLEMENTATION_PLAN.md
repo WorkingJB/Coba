@@ -18,7 +18,7 @@ _Last updated: 2026-06-19._
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts`, `npm run dev` |
 | Online multiplayer | ✅ **Live** at https://coba-246.fly.dev | `server/`, `src/web/net.ts`, `npm run server` |
 | Auth + persistence | ⏸️ Deferred (intentionally) | — |
-| Hero/territory content | ⏳ 2/5 heroes, 3 territories | `src/heroes.ts`, `src/territory.ts` |
+| Hero/territory content | ⏳ 5/5 heroes ✅, 3 territories | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
 **Verify everything still works:**
@@ -76,29 +76,81 @@ Goal: expand from the 2-hero proof to the **5-archetype starter set** (`ARCHITEC
 add territory variety, and grow ability mechanics — *without* power creep (territories change
 rules, not raw power).
 
-### 5a. Hero roster — 2 of 5 built
+### 5a. Hero roster — ✅ 5 of 5 built (complete)
 
 | Archetype (design target) | Hero | Status | Engine fit |
 | --- | --- | --- | --- |
 | Tank — Defense / Zone Control | The Warden | ✅ built | existing |
 | Assassin — Burst / Tempo | The Shade | ✅ built | existing |
-| Summoner — Board Presence | _unbuilt_ | 🔲 | **pure data** — units + `allZones`, no new mechanics |
-| Support — Buffs / Healing | _unbuilt_ | 🔲 | **needs engine work** — no "restore/buff own presence" mechanic exists |
-| Mage — Combo / Spell Control | _unbuilt_ | 🔲 | **needs engine work** — "combo" implies cross-turn/sequence state |
+| Summoner — Board Presence | The Conjurer | ✅ **built (2026-06-19)** | pure data — `allZones` units + single-zone bodies, `addSelf` ability |
+| Support — Buffs / Healing | The Oracle | ✅ **built (2026-06-19)** | engine extended — new `buff` card kind + `amplify` ability kind |
+| Mage — Combo / Spell Control | The Magus | ✅ **built (2026-06-19)** | engine extended — `damageFrac` (percentage removal) on spells |
 
-**What the engine models today** (`src/types.ts`): cards are `unit` (adds presence) or `spell`
-(removes enemy presence, optional `selfPresence`), with an `allZones` board-wide flag. Abilities
-are `addSelf` or `removeFoe` (+ optional `selfPlant`), cooldown-gated. A new hero that fits these
-primitives is **data only** (`src/heroes.ts` + cards in `src/cards.ts`). Anything else extends the
-engine first.
+**The roster (5/5) is complete.** Mirror balance is solid across all five heroes (46–49% P1 win,
+i.e. no seat bias), and most cross-matchups at Neutral Field sit in 43–60%. The deliberate outliers
+form a rock-paper-scissors spine — **Shade > Magus/Oracle**, **Magus > Oracle**, **Oracle > Warden/
+Conjurer** — layered with territory swings (Volcanic Forge favors spell decks, Ancient Forest favors
+unit decks). One observation for a future balance pass: **the Shade is the strongest hero overall**
+(hard-counters both casters, even vs the rest). Left untouched here — it's a committed hero and
+"finish the roster" isn't the brief to rebalance it.
 
-**Recommended order** (cheapest/highest-confidence first):
-1. **Summoner** — pure data; proves the "add a hero" pipeline end-to-end (deck + ability + bot
-   handling + balance pass) with zero engine risk. Do this one first.
-2. **Support** — design + add a `heal`/buff mechanic (e.g. ability kind `restoreSelf`, or a card
-   that raises an existing zone's presence). Touch `engine.ts`, `types.ts`, `bot.ts`.
-3. **Mage** — the hardest; "combo/spell control" needs a real sequencing hook (chain bonuses,
-   delayed effects, or spell-cost reduction state). Design before building.
+**The Magus (built):** spell control via **percentage removal** — where the Shade does flat burst
+removal (weak vs huge stacks), the Magus strips a *fraction* (`damageFrac`), the natural answer to
+big presence (Warden walls, Oracle's amplified zones — it hard-counters the Oracle). `disjunction`
+strips 40% of *every* zone (board-wide control). Light on bodies, so its spells seize to hold.
+Ability **Nullify** (flat removeFoe, reused kind). Identity is strongly territorial: dominant on
+Volcanic Forge (~78–100%), weak on Ancient Forest (~9–28% vs presence decks), mixed at Neutral.
+Engine: `damageFrac` is a clean mirror of `amplify`; no client changes (all the existing `spell`
+kind). **Balance lesson:** presence-generation (seize) dominated the win rate far more than the
+removal fraction — stripping seize swung the Magus from ~90% to ~10%; the fraction was a minor knob.
+
+> **Note on "Combo".** The design table calls the Mage "Combo / Spell Control". True multi-card
+> combos need persistent cross-turn state, which (a) is a large engine addition and (b) is invisible
+> to the greedy bench bot, so it can't be self-play balanced. We delivered the achievable, testable
+> half — **Spell Control** via scaling removal — and treat the board-scaling spells as the
+> "combo-like" payoff. Real combo state is a candidate for a later pass alongside a smarter bot.
+
+**The Oracle (built):** banks presence with solid bodies, then multiplies it with `buff` cards
+(a new card kind). A buff **adds flat presence then amplifies the zone total by 40%** —
+deliberately *not* pure-multiply: an early version with no flat component was unplayable (0–5%
+win) because buffs are dead when behind and the deck fell behind playing conditional cards. The
+flat+amplify form is never dead. Ability **Rally** (free: +2 then +40%, cd 3) is the new
+`amplify` ability kind. Engine: a buff phase resolves after units, before the spell snapshot
+(so spells can strip buffed presence); bot evaluates buffs via immediate board value. **Anti-snowball
+is structural:** a zone scores 1 point for *any* lead, so amplifying a zone you already hold is
+worthless — buffs are for *flipping contested zones*. Bench: balanced vs Warden (~56% neutral),
+Conjurer (~48–52%), mirror (~47%). **Known follow-up:** Shade hard-counters the Oracle across all
+territories (~88–99%) — a no-removal buff deck is structurally prey to removal. It sits in the same
+extreme band the committed roster already ships (Warden loses 87% to Shade on Volcanic). Left as the
+Oracle's designed bane; revisit when the Mage's spell-control lands or if a removal-hedge is added.
+
+**Engine mechanics now available for reuse:** card kinds `unit` (flat presence) / `spell` (flat
+`damage` + `damageFrac` percentage removal, optional `selfPresence` seize) / `buff` (flat
+`presence` + `amplify` percentage self-buff); ability kinds `addSelf` / `removeFoe` / `amplify`;
+the `allZones` flag works on all of them. A new hero that fits these primitives is **data only**
+(`src/heroes.ts` + `src/cards.ts`). A genuinely new mechanic (e.g. cross-turn combo state) extends
+the engine *and* the bot first — and must produce immediate board value or the greedy bench bot
+can't evaluate it.
+
+**The Conjurer (built):** goes wide — thin presence across all three zones via `allZones`
+cards (swarm/conjure/legion), plus single-zone bodies (sprite/golem) to win a contested point.
+No removal — a clean weakness vs. tempo/removal decks. Ability **Manifest** (free +4 to a zone,
+cd 3). Bench profile: balanced at Neutral (~40% vs Warden, ~51% vs Shade, mirror ~46%); weak on
+Volcanic Forge (Shade's amplified removal shreds thin presence); strong on Ancient Forest (wide
+units amplified). **Known follow-up for 5b:** Shade-vs-Conjurer on Ancient Forest is ~95% — the
+territory's "+1 presence" amplifies `allZones` cards 3×. That's an *Ancient Forest* lever, not a
+hero lever; left untouched here to avoid destabilizing the committed Warden/Shade balance. Retune
+the territory (not the hero) during the 5b territory pass.
+
+**Build order taken** (cheapest/highest-confidence first — all done):
+1. ✅ **Summoner** — pure data; proved the "add a hero" pipeline.
+2. ✅ **Support** — added the `buff` card kind + `amplify` ability kind. Lesson: a buff mechanic
+   must add *immediate flat board value*, not pure-multiply — both because buffs are
+   dead-when-behind, and because the greedy bench bot only values immediate board state.
+3. ✅ **Mage** — added `damageFrac` (percentage removal), a clean mirror of `amplify`. Lesson:
+   presence-generation (seize) drove the win rate far more than the removal fraction. We delivered
+   the **Spell Control** half of "Combo / Spell Control"; true cross-turn combo state is deferred
+   (see the note above — it needs an immediate-value framing or a smarter bot).
 
 **Per-hero definition of done:** deck (12 cards, several ≤2-cost), one signature ability,
 bot can play it (`src/bot.ts` heuristics cover the new mechanics), and a `sim:bench` balance

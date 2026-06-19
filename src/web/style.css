@@ -11,6 +11,7 @@
   --bot: #f85149;
   --accent: #58a6ff;
   --spell: #d2a8ff;
+  --buff: #e3b341;
 }
 
 * { box-sizing: border-box; }
@@ -225,6 +226,7 @@ body {
 .card-mini:hover { transform: none; border-color: var(--line); }
 .card-unit { border-top: 3px solid var(--you); }
 .card-spell { border-top: 3px solid var(--spell); }
+.card-buff { border-top: 3px solid var(--buff); }
 .card-selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
 .card-disabled { opacity: 0.4; cursor: not-allowed; }
 .card-disabled:hover { transform: none; border-color: var(--line); }
