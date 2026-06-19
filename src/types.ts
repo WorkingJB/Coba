@@ -25,10 +25,26 @@ export interface CardDef {
   damage?: number;
   /** Spells: presence the caster also plants in the zone (lets removal TAKE ground, not just deny). */
   selfPresence?: number;
+  /** If true, the card's effect applies to ALL zones at once (board-wide swing). Target zone is ignored. */
+  allZones?: boolean;
   text: string;
 }
 
-/** A hero is a deck archetype: an identity plus a fixed starting deck list. */
+/** A free, cooldown-gated signature move that does things cards can't. */
+export interface AbilityDef {
+  id: string;
+  name: string;
+  text: string;
+  /** `addSelf` plants the caster's presence; `removeFoe` strips the opponent's. */
+  kind: "addSelf" | "removeFoe";
+  amount: number;
+  /** For `removeFoe`: presence the caster also plants (lets the strike TAKE ground, not just deny). */
+  selfPlant?: number;
+  /** Turns before it can be used again after firing. */
+  cooldown: number;
+}
+
+/** A hero is a deck archetype: an identity, a fixed deck, and a signature ability. */
 export interface HeroDef {
   id: string;
   name: string;
@@ -36,6 +52,7 @@ export interface HeroDef {
   archetype: string;
   /** Card ids that make up the starting deck (drawn in order, reshuffled when empty). */
   deck: string[];
+  ability: AbilityDef;
 }
 
 /** A single control point. Whoever has strictly greater presence controls it. */
@@ -57,6 +74,8 @@ export interface PlayerState {
   discard: string[];
   /** Victory points accrued from holding zones. */
   points: number;
+  /** Turns until the hero ability can be used again (0 = ready now). */
+  abilityReady: number;
 }
 
 export interface GameState {
@@ -79,6 +98,8 @@ export interface PlannedAction {
   cardId: string | null;
   /** Target zone for the card, or null when passing. */
   zone: ZoneId | null;
+  /** Zone to fire the hero ability at this turn, or null/undefined to not use it. */
+  ability?: ZoneId | null;
 }
 
 export interface MatchResult {

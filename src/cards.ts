@@ -1,5 +1,6 @@
-// Card catalog for the prototype. Deliberately tiny — just enough to make the
-// two starter archetypes feel distinct and prove the resolution loop is fun.
+// Card catalog. Expanded from the first tiny set after playtest feedback that
+// "card selection feels very small." Each archetype now has a real curve with
+// cheap early plays (so turn 1 isn't dead) plus a board-wide card for swing.
 
 import type { CardDef } from "./types.js";
 
@@ -14,7 +15,7 @@ export const CARDS: Record<string, CardDef> = {
     text: "Add 2 presence to a zone.",
   },
 
-  // --- Tank archetype: Defense / Zone Control (durable, high-presence units) ---
+  // --- Tank archetype: Defense / Zone Control (durable, high-presence, board-wide) ---
   shieldwall: {
     id: "shieldwall",
     name: "Shieldwall",
@@ -22,14 +23,6 @@ export const CARDS: Record<string, CardDef> = {
     kind: "unit",
     presence: 4,
     text: "Add 4 presence to a zone.",
-  },
-  bulwark: {
-    id: "bulwark",
-    name: "Bulwark",
-    cost: 4,
-    kind: "unit",
-    presence: 6,
-    text: "Add 6 presence to a zone.",
   },
   rampart: {
     id: "rampart",
@@ -39,8 +32,33 @@ export const CARDS: Record<string, CardDef> = {
     presence: 5,
     text: "Add 5 presence to a zone.",
   },
+  bulwark: {
+    id: "bulwark",
+    name: "Bulwark",
+    cost: 4,
+    kind: "unit",
+    presence: 6,
+    text: "Add 6 presence to a zone.",
+  },
+  garrison: {
+    id: "garrison",
+    name: "Garrison",
+    cost: 5,
+    kind: "unit",
+    presence: 8,
+    text: "Add 8 presence to a zone.",
+  },
+  bastion: {
+    id: "bastion",
+    name: "Bastion",
+    cost: 3,
+    kind: "unit",
+    presence: 2,
+    allZones: true,
+    text: "Add 2 presence to EVERY zone.",
+  },
 
-  // --- Assassin archetype: Burst / Tempo (cheap units + presence removal) ---
+  // --- Assassin archetype: Burst / Tempo (cheap units, removal that seizes, board-wide) ---
   skirmisher: {
     id: "skirmisher",
     name: "Skirmisher",
@@ -48,6 +66,15 @@ export const CARDS: Record<string, CardDef> = {
     kind: "unit",
     presence: 3,
     text: "Add 3 presence to a zone.",
+  },
+  dagger: {
+    id: "dagger",
+    name: "Dagger",
+    cost: 1,
+    kind: "spell",
+    damage: 2,
+    selfPresence: 1,
+    text: "Remove 2 enemy presence, then add 1 of your own.",
   },
   ambush: {
     id: "ambush",
@@ -66,6 +93,16 @@ export const CARDS: Record<string, CardDef> = {
     damage: 6,
     selfPresence: 2,
     text: "Remove 6 enemy presence, then add 2 of your own.",
+  },
+  volley: {
+    id: "volley",
+    name: "Volley",
+    cost: 3,
+    kind: "spell",
+    damage: 2,
+    selfPresence: 1,
+    allZones: true,
+    text: "Remove 2 enemy presence and add 1 of your own in EVERY zone.",
   },
 };
 

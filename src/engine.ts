@@ -21,6 +21,7 @@ import { territoryDef } from "./territory.js";
 import { type Rng, shuffle } from "./rng.js";
 
 const ENERGY_CAP = 8;
+const STARTING_ENERGY = 1;
 const OPENING_HAND = 3;
 const DEFAULT_POINTS_TO_WIN = 12;
 const DEFAULT_MAX_TURNS = 25;
@@ -42,7 +43,32 @@ function makePlayer(id: PlayerId, heroId: string, rng: Rng): PlayerState {
   const deck = shuffle(heroDef(heroId).deck, rng);
   const hand = deck.slice(0, OPENING_HAND);
   const draw = deck.slice(OPENING_HAND);
-  return { id, heroId, energy: 1, energyCap: 1, hand, draw, discard: [], points: 0 };
+
+  // Guarantee a non-dead first turn: ensure the opening hand holds at least one
+  // card castable on turn 1, swapping the priciest hand card for a cheap one from
+  // the draw pile if needed. (Playtest: the Warden could be stuck passing turn 1.)
+  if (!hand.some((c) => cardDef(c).cost <= STARTING_ENERGY)) {
+    const cheapInDraw = draw.findIndex((c) => cardDef(c).cost <= STARTING_ENERGY);
+    if (cheapInDraw !== -1) {
+      let priciest = 0;
+      for (let i = 1; i < hand.length; i++) {
+        if (cardDef(hand[i]!).cost > cardDef(hand[priciest]!).cost) priciest = i;
+      }
+      [hand[priciest], draw[cheapInDraw]] = [draw[cheapInDraw]!, hand[priciest]!];
+    }
+  }
+
+  return {
+    id,
+    heroId,
+    energy: STARTING_ENERGY,
+    energyCap: STARTING_ENERGY,
+    hand,
+    draw,
+    discard: [],
+    points: 0,
+    abilityReady: 0, // ready from turn 1
+  };
 }
 
 export function initGame(opts: InitOptions): GameState {
@@ -110,8 +136,7 @@ function consumeCard(state: GameState, action: PlannedAction): ResolvedPlay | nu
   const p = state.players[player];
 
   if (cardId === null || zone === null) {
-    state.log.push(`  ${player} passes.`);
-    return null;
+    return null; // plain pass — resolveTurn logs it only if no ability fires either
   }
   const idx = p.hand.indexOf(cardId);
   if (idx === -1) {
@@ -163,8 +188,13 @@ export function resolveTurn(
   for (const r of plays) {
     if (r.card.kind !== "unit") continue;
     const add = r.card.presence ?? 0;
-    s.zones[r.zone].presence[r.player] += add;
-    s.log.push(`  ${r.player} plays ${r.card.name} → ${r.zone} (+${add} presence).`);
+    if (r.card.allZones) {
+      for (const z of ZONE_IDS) s.zones[z].presence[r.player] += add;
+      s.log.push(`  ${r.player} plays ${r.card.name} → ALL zones (+${add} each).`);
+    } else {
+      s.zones[r.zone].presence[r.player] += add;
+      s.log.push(`  ${r.player} plays ${r.card.name} → ${r.zone} (+${add} presence).`);
+    }
   }
 
   // Phase 2 — spells resolve SIMULTANEOUSLY. Every removal is computed against a
@@ -178,12 +208,52 @@ export function resolveTurn(
   for (const r of plays) {
     if (r.card.kind !== "spell") continue;
     const foe = opponentOf(r.player);
-    const removed = Math.min(snapshot[r.zone][foe], r.card.damage ?? 0);
-    s.zones[r.zone].presence[foe] = Math.max(0, s.zones[r.zone].presence[foe] - removed);
     const planted = r.card.selfPresence ?? 0;
-    s.zones[r.zone].presence[r.player] += planted;
-    const seize = planted > 0 ? `, +${planted} own` : "";
-    s.log.push(`  ${r.player} casts ${r.card.name} → ${r.zone} (−${removed} enemy${seize}).`);
+    const targets = r.card.allZones ? ZONE_IDS : [r.zone];
+    let removedTotal = 0;
+    for (const z of targets) {
+      const removed = Math.min(snapshot[z][foe], r.card.damage ?? 0);
+      s.zones[z].presence[foe] = Math.max(0, s.zones[z].presence[foe] - removed);
+      s.zones[z].presence[r.player] += planted;
+      removedTotal += removed;
+    }
+    const seize = planted > 0 ? `, +${planted} own${r.card.allZones ? " each" : ""}` : "";
+    const where = r.card.allZones ? "ALL zones" : r.zone;
+    s.log.push(`  ${r.player} casts ${r.card.name} → ${where} (−${removedTotal} enemy${seize}).`);
+  }
+
+  // Phase 3 — hero abilities (free, cooldown-gated). Snapshot again so removals
+  // resolve simultaneously; additive effects are order-independent regardless.
+  const abilitySnap = {} as Record<ZoneId, Record<PlayerId, number>>;
+  for (const z of ZONE_IDS) {
+    abilitySnap[z] = { P1: s.zones[z].presence.P1, P2: s.zones[z].presence.P2 };
+  }
+  for (const a of ordered) {
+    if (!a.ability) continue;
+    const p = s.players[a.player];
+    const ability = heroDef(p.heroId).ability;
+    if (p.abilityReady > 0) {
+      s.log.push(`  ${a.player}'s ${ability.name} isn't ready — skipped.`);
+      continue;
+    }
+    if (ability.kind === "addSelf") {
+      s.zones[a.ability].presence[a.player] += ability.amount;
+      s.log.push(`  ${a.player} uses ${ability.name} → ${a.ability} (+${ability.amount} presence).`);
+    } else {
+      const foe = opponentOf(a.player);
+      const removed = Math.min(abilitySnap[a.ability][foe], ability.amount);
+      s.zones[a.ability].presence[foe] = Math.max(0, s.zones[a.ability].presence[foe] - removed);
+      const planted = ability.selfPlant ?? 0;
+      s.zones[a.ability].presence[a.player] += planted;
+      const seize = planted > 0 ? `, +${planted} own` : "";
+      s.log.push(`  ${a.player} uses ${ability.name} → ${a.ability} (−${removed} enemy${seize}).`);
+    }
+    p.abilityReady = ability.cooldown;
+  }
+
+  // Anyone who neither played a card nor fired an ability simply passed.
+  for (const a of ordered) {
+    if (a.cardId === null && !a.ability) s.log.push(`  ${a.player} passes.`);
   }
 
   // Score zones.
@@ -215,6 +285,7 @@ export function resolveTurn(
     const p = s.players[pid];
     p.energyCap = Math.min(ENERGY_CAP, p.energyCap + 1);
     p.energy = p.energyCap;
+    p.abilityReady = Math.max(0, p.abilityReady - 1);
     drawOne(p, rng);
   }
 

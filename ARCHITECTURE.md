@@ -175,7 +175,7 @@ Disciplined sequencing wins (per the second outline); scope targets from the fir
 2. **Graphical client (human vs bot)** — drop rendering on top of the validated engine. Local/single-player vs the greedy bot, no backend. ✅ **Scaffolded** as a lightweight Vite + DOM client (`index.html`, `src/web/`); run `npm run dev`. *Note:* DOM rather than Phaser — fastest path to a human in the loop, which is step 2's whole purpose. Phaser/canvas juice layers on later without touching the engine. **No fly.io / Colyseus needed until step 4.**
 3. **Supabase auth + deck persistence** — accounts, save decks.
 4. **Second player** — Colyseus room, networked simultaneous-turn lock/resolution.
-5. **Hero abilities + territory modifiers** — expand to the archetype roster.
+5. **Hero abilities + territory modifiers** — expand to the archetype roster. ⏳ **Started early** (pulled forward from playtest feedback that the game needed to be "more dynamic"): each hero now has a free, cooldown-gated signature ability (Warden *Entrench*, Shade *Eviscerate*) playable in the web client. Still to do: more heroes, more territories, ability variety.
 6. **Faction war map** — persistent territory system, realtime subscriptions, capture → card-availability hook. Built **last**, on top of a solid loop.
 
 Milestone gate between 1 and 2: *do not* render anything until the rules feel good in text.

@@ -11,6 +11,7 @@ import {
   opponentOf,
 } from "./types.js";
 import { cardDef } from "./cards.js";
+import { heroDef } from "./heroes.js";
 import { legalActions } from "./engine.js";
 import { territoryDef } from "./territory.js";
 
@@ -29,11 +30,14 @@ function scoreAction(state: GameState, action: PlannedAction): number {
   if (action.cardId !== null && action.zone !== null) {
     const card = territoryDef(state.territoryId).modifyCard(cardDef(action.cardId));
     cost = card.cost;
-    if (card.kind === "unit") {
-      pres[action.zone].me += card.presence ?? 0;
-    } else {
-      pres[action.zone].foe = Math.max(0, pres[action.zone].foe - (card.damage ?? 0));
-      pres[action.zone].me += card.selfPresence ?? 0;
+    const targets = card.allZones ? ZONE_IDS : [action.zone];
+    for (const z of targets) {
+      if (card.kind === "unit") {
+        pres[z].me += card.presence ?? 0;
+      } else {
+        pres[z].foe = Math.max(0, pres[z].foe - (card.damage ?? 0));
+        pres[z].me += card.selfPresence ?? 0;
+      }
     }
   }
 
@@ -47,6 +51,41 @@ function scoreAction(state: GameState, action: PlannedAction): number {
   return controlled * 1000 + margin - cost * 0.5;
 }
 
+/** If the ability is ready, pick the zone where firing it helps most. */
+function bestAbilityZone(state: GameState, player: PlayerId): ZoneId | null {
+  const p = state.players[player];
+  if (p.abilityReady > 0) return null;
+  const ability = heroDef(p.heroId).ability;
+  const foe = opponentOf(player);
+
+  let bestZone: ZoneId | null = null;
+  let bestScore = -Infinity;
+  for (const target of ZONE_IDS) {
+    let controlled = 0;
+    let margin = 0;
+    for (const z of ZONE_IDS) {
+      let me = state.zones[z].presence[player];
+      let fo = state.zones[z].presence[foe];
+      if (z === target) {
+        if (ability.kind === "addSelf") {
+          me += ability.amount;
+        } else {
+          fo = Math.max(0, fo - ability.amount);
+          me += ability.selfPlant ?? 0;
+        }
+      }
+      if (me > fo) controlled += 1;
+      margin += me - fo;
+    }
+    const sc = controlled * 1000 + margin;
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestZone = target;
+    }
+  }
+  return bestZone;
+}
+
 export function chooseAction(state: GameState, player: PlayerId): PlannedAction {
   const options = legalActions(state, player);
   let best = options[0]!;
@@ -58,5 +97,6 @@ export function chooseAction(state: GameState, player: PlayerId): PlannedAction 
       best = opt;
     }
   }
-  return best;
+  // Fire the ability whenever it's ready (free value), on its best zone.
+  return { ...best, ability: bestAbilityZone(state, player) };
 }
