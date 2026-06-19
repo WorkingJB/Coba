@@ -16,18 +16,20 @@ _Last updated: 2026-06-19._
 | --- | --- | --- |
 | Pure card engine | ✅ Validated, balanced (~47–49% mirrors) | `src/engine.ts`, `npm run sim`, `npm run sim:bench` |
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts`, `npm run dev` |
-| Online multiplayer | ✅ **Live** at https://coba-246.fly.dev | `server/`, `src/web/net.ts`, `npm run server` |
+| Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
 | Auth + persistence | ⏸️ Deferred (intentionally) | — |
 | Hero/territory content | ⏳ 5/5 heroes ✅, 3 territories | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
-**Verify everything still works:**
+**⛔ Testing is cloud-only — see [`CLAUDE.md`](./CLAUDE.md) + [`DEPLOY.md`](./DEPLOY.md).** Do not
+run local dev/server/sim. To verify a change, deploy to **staging** and test the URL:
 ```bash
-npm run typecheck        # tsc --noEmit, must be clean
-npm run sim:bench        # engine balance sanity (~47–53% expected)
-npm run build            # vite build → dist/
-npm run server           # boots Colyseus + serves dist/ on :2567
+fly deploy -c fly.staging.toml --ha=false   # → https://test.coba.games  (test here)
+fly deploy --ha=false                        # → https://www.coba.games   (prod, after staging)
 ```
+`node_modules`/`dist` are intentionally not kept locally (Docker builds them in-container). The
+balance sim (`npm run sim:bench`) is now a cloud/CI concern, not a local run — a CI workflow to run
+typecheck + bench on push is a candidate follow-up if balance work resumes.
 
 ---
 

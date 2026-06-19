@@ -1,5 +1,8 @@
-# Coba — single Fly app: the Colyseus match server + the built web client.
-# App + org are both "coba-246" (the project's Fly org slug).
+# Coba — PRODUCTION. Deploy with:  fly deploy --ha=false
+# Single Fly app: the Colyseus match server + the built web client.
+# Serves https://www.coba.games (custom domain) and coba-246.fly.dev.
+# Staging lives in fly.staging.toml (app coba-test → test.coba.games).
+# Testing happens on STAGING first — never deploy straight to prod. See DEPLOY.md.
 app = "coba-246"
 primary_region = "iad"
 

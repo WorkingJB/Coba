@@ -1,0 +1,23 @@
+# Coba — STAGING. Deploy with:  fly deploy -c fly.staging.toml --ha=false
+# Serves https://test.coba.games (custom domain) and coba-test.fly.dev.
+# Identical image/process to production (fly.toml); this is the cloud test
+# environment — ALL testing happens here, never locally. See DEPLOY.md + CLAUDE.md.
+app = "coba-test"
+primary_region = "iad"
+
+[build]
+
+[http_service]
+  internal_port = 2567
+  force_https = true            # clients connect over wss://
+  # SINGLE MACHINE ONLY — match rooms are in-memory, both players must hit the
+  # same instance (same constraint as prod; see ARCHITECTURE.md §4).
+  # Staging suspends when idle to save cost; a cold start spins it back up. A
+  # match in progress dies if it suspends — acceptable for a test environment.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
