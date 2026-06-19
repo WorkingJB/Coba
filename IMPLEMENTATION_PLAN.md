@@ -18,7 +18,7 @@ _Last updated: 2026-06-19._
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts` |
 | Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
 | Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
-| Auth + persistence | ⏸️ Deferred (intentionally) | — |
+| Auth + persistence | 🔜 **Decided (2026-06-19)** — Better Auth + Fly Managed Postgres (email+password; online-only gating). Build not started. | `server/`, `ARCHITECTURE.md §4.3` |
 | Hero/territory content | ✅ 6 heroes, 4 territories (≥4 target met; both old boards retuned) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
@@ -48,9 +48,10 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
    See the 5b section for the verified before/after.
 3. **5c — Ability variety: ✅** covered (3 ability kinds). Optional polish only.
 
-**Then decide sequencing (Step 3 vs Step 6):**
-- **Step 3 — Auth + persistence** is the sequential next build, but **blocked on the auth-mechanism
-  decision** (open decision #3). Needs a product call before code.
+**Then: Step 3 — Auth + persistence (DECIDED 2026-06-19, ready to build):**
+- **Mechanism locked: Better Auth (self-hosted) on Fly Managed Postgres.** Email+password first;
+  account **required for online only** (anonymous bot play stays). Phased plan + integration notes
+  in the Step 3 section below — start with Phase A.
 - **Step 6 — Faction war map** is the headline feature but depends on Step 3 (persistence).
 
 **Non-blocking quality/infra follow-ups (any time):**
@@ -70,7 +71,7 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 
 1. ✅ **Card resolution engine** — done, balanced.
 2. ✅ **Graphical client (human vs bot)** — done.
-3. ⏸️ **Auth + deck persistence** — *deliberately deferred* past the step-4 testing milestone. Blocked on the auth-mechanism decision (`ARCHITECTURE.md §6.3`).
+3. 🔜 **Auth + deck persistence** — *mechanism decided (2026-06-19): Better Auth + Fly Managed Postgres* (email+password; online-only gating). Ready to build (Phase A); see the Step 3 section.
 4. ✅ **Second player (Colyseus)** — shipped, gaps closed, and now running on a **two-environment
    cloud setup** (staging + prod, custom domains). See the deployment milestone below.
 5. ⏳ **Hero abilities + territory modifiers** — *nearly done.* **5a ✅ 6 heroes** (5 design-target +
@@ -311,11 +312,40 @@ balance bench shows no dominant archetype. Then re-evaluate Step 3 vs Step 6.
 
 ## Later steps (not started)
 
-### Step 3 — Auth + deck persistence (deferred, sequenced before 6)
-Fly Managed Postgres. Tables sketched in `ARCHITECTURE.md §4.3` (`players`, `heroes`, `cards`,
-`decks`, `territories`, `faction_progress`). **Blocked on a decision:** auth mechanism is
-unchosen (`§6.3` — self-hosted Lucia vs. in-house service vs. third-party IdP). Also flagged:
-verify Fly Managed Postgres backup/HA maturity before betting progression data on it.
+### Step 3 — Auth + persistence — DECIDED 2026-06-19 (Better Auth + Fly Managed Postgres)
+
+**Mechanism (locked):** self-hosted **Better Auth** (TypeScript) mounted in the existing
+Express/Colyseus server, data in **Fly Managed Postgres (MPG)**. Own our data, no vendor lock-in,
+no per-MAU cost, co-located with the server on Fly. (Better Auth is the maintained successor to
+Lucia, which was sunset in 2025.) **Email+password** for the first increment; account **required
+for online only** (anonymous bot play stays). Data model: `ARCHITECTURE.md §4.3` — map `players`
+→ a `profiles` table keyed off Better Auth's `user`.
+
+**Phased build (staging-first, cloud-only):**
+- **Phase A (foundation):** provision MPG → `fly mpg attach` `DATABASE_URL` to staging `coba-test`
+  → add Better Auth (email+password, `pg` Pool) to `server/index.ts` → run its schema migration +
+  a `profiles` table → client signup/login screen + session + logout (`src/web/main.ts`, `net.ts`).
+  Gate online play behind login; bot stays anonymous.
+- **Phase B:** record match outcomes to a `matches` table for logged-in players; show W/L (also the
+  seed for the Step 6 faction tally).
+- **Phase C (later):** decks/cosmetics/faction columns — once deck-building and Step 6 exist (no
+  point persisting "decks" while they're fixed per hero).
+
+**Integration notes (gathered 2026-06-19 — don't re-derive):**
+- Deps: `better-auth`, `pg`, `@types/pg`, dev `@better-auth/cli`. Project is ESM (Better Auth requires it).
+- Express mount: `import { toNodeHandler, fromNodeHeaders } from "better-auth/node"`; mount
+  `app.all("/api/auth/*", toNodeHandler(auth))` **before** `express.json()` **and before** the SPA
+  catch-all `app.get("*")` in `server/index.ts`. Session: `auth.api.getSession({ headers:
+  fromNodeHeaders(req.headers) })`. CORS needs `credentials: true` + explicit origin.
+- Better Auth accepts a `pg` `Pool` directly (built-in Kysely adapter). Needs `BETTER_AUTH_SECRET`
+  + baseURL/trustedOrigins (set as Fly secrets via `fly secrets set`).
+- **MPG is private-network only** — not reachable from a laptop. Run migrations from inside the Fly
+  app via `fly ssh` (`@better-auth/cli migrate`) or programmatically at boot; connect locally via
+  `fly mpg proxy` / `fly mpg connect` if needed.
+- **Online auth gating (open design point):** authenticate the Colyseus WS join — pass the Better
+  Auth session token and verify it server-side in `CobaRoom` (`onAuth`/`onJoin`).
+- Fly **MPG** now provides HA + automated backups + connection pooling (the earlier backup/HA
+  maturity flag is largely addressed; community notes HA has nuances — fine for prototype data).
 
 ### Step 6 — Faction war map (build last)
 Persistent territory state pushed from the Colyseus server (broadcast, Redis pub-sub if it
@@ -330,7 +360,7 @@ solid loop and real persistence — do not start before 3.
 | --- | --- | --- |
 | 1 | Monetization mechanic (cosmetic-only is the lean) | economy/art work |
 | 2 | Launch art direction (ASCII is prototype-only) | needs game-director review |
-| 3 | Auth mechanism (Lucia vs. in-house vs. IdP) | **Step 3** |
+| 3 | ✅ **Resolved (2026-06-19)** — Better Auth (self-hosted) + Fly Managed Postgres; email+password; online-only gating | ~~Step 3~~ unblocked |
 
 These are product decisions, not build tasks — surface them when their step comes up; don't
 guess them in code.
