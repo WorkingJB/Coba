@@ -51,7 +51,7 @@ function runVerbose(): void {
   const p2 = "shade";
   const territoryId = "volcanic_forge";
   console.log("=".repeat(60));
-  console.log(`Cardito — single match (seed 42)`);
+  console.log(`Coba — single match (seed 42)`);
   console.log(`P1: ${heroDef(p1).name} [${heroDef(p1).archetype}]`);
   console.log(`P2: ${heroDef(p2).name} [${heroDef(p2).archetype}]`);
   console.log(`Battlefield: ${territoryDef(territoryId).name}`);

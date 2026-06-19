@@ -1,4 +1,4 @@
-# Cardito — Engine Prototype
+# Coba — Engine Prototype
 
 Build Sequence **step 1** from [`ARCHITECTURE.md`](./ARCHITECTURE.md): the pure
 card-resolution engine, console only, no graphics. The goal of this step is to

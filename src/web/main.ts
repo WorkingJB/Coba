@@ -1,4 +1,4 @@
-// Cardito browser client — human (P1) vs greedy bot (P2), entirely client-side.
+// Coba browser client — human (P1) vs greedy bot (P2), entirely client-side.
 // Two screens: a pre-match hero-select (with deck library) and the match itself.
 // Reuses the SAME pure engine the simulator uses (src/engine.ts) as authority.
 
@@ -177,7 +177,7 @@ function renderSelect(): void {
   app.innerHTML = "";
 
   const header = el("div", "header");
-  header.appendChild(el("h1", undefined, "CARDITO"));
+  header.appendChild(el("h1", undefined, "COBA"));
   header.appendChild(el("div", "tagline", "Tactical card combat for three zones. Choose your hero."));
   app.appendChild(header);
 

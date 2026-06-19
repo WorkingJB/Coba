@@ -1,4 +1,4 @@
-# Cardito — Unified Architecture
+# Coba — Unified Architecture
 
 > **One-sentence pitch:** A 2v2 hero-based tactical card battler where players fight over three strategic zones, and every victory helps their faction conquer a persistent world map that unlocks new cards, missions, and seasonal rewards.
 

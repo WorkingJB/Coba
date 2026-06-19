@@ -1,4 +1,4 @@
-// Domain types for the Cardito card-resolution engine.
+// Domain types for the Coba card-resolution engine.
 // Prototype scope: 1v1, three control points, simultaneous-turn resolution.
 // Heroes are deck archetypes; territory alters rules, never raw power.
 

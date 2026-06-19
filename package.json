@@ -1,9 +1,9 @@
 {
-  "name": "cardito-engine",
+  "name": "coba-engine",
   "version": "0.0.1",
   "private": true,
   "type": "module",
-  "description": "Cardito — pure card-resolution engine (Build Sequence step 1, console only)",
+  "description": "Coba — pure card-resolution engine (Build Sequence step 1, console only)",
   "scripts": {
     "dev": "vite",
     "build:web": "vite build",
