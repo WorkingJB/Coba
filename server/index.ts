@@ -8,7 +8,9 @@ import express from "express";
 import cors from "cors";
 import colyseus from "colyseus";
 import wsTransport from "@colyseus/ws-transport";
+import { toNodeHandler } from "better-auth/node";
 import { CobaRoom } from "./CobaRoom.js";
+import { auth } from "./auth.js";
 
 // CommonJS deps — default-import and destructure (see CobaRoom.ts).
 const { Server } = colyseus;
@@ -19,8 +21,27 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, "../dist");
 
 const app = express();
-app.use(cors()); // dev: client on :5173 reaches matchmaking on :2567
+// Auth needs credentialed CORS with explicit origins (a wildcard origin can't
+// carry cookies). Same-origin in every deployed env, so this only matters for
+// local dev (client on :5173 → matchmaking/auth on :2567), but be explicit.
+app.use(
+  cors({
+    origin: [
+      "https://test.coba.games",
+      "https://www.coba.games",
+      "https://coba.games",
+      "http://localhost:5173",
+    ],
+    credentials: true,
+  }),
+);
 app.get("/health", (_req, res) => res.json({ ok: true }));
+
+// Better Auth HTTP handler. MUST come before express.json() (it reads the raw
+// body itself) and before the SPA catch-all (so /api/auth/* isn't swallowed by
+// index.html). Express 4 needs a regex/splat that matches the subpath.
+app.all("/api/auth/*", toNodeHandler(auth));
+app.use(express.json());
 
 // Canonical host: 301 the apex (coba.games) → www.coba.games, preserving path +
 // query. The prod app serves www, so this just collapses the bare domain onto

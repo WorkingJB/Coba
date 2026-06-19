@@ -22,6 +22,27 @@ Local `node_modules` / `dist` are intentionally **not** kept — the Docker imag
 in-container (`npm ci` + `vite build`), so deploys need neither. Restore them only if you ever
 must work offline: `npm install`.
 
+## Auth database (Fly Managed Postgres) & migrations
+
+Better Auth persists to **Fly Managed Postgres**. Staging cluster: `coba-test-db`
+(id `1zqyxr7l8n7owp8m`, region `iad`), `fly mpg attach`ed to `coba-test` → injects the
+`DATABASE_URL` secret (a private-network pgbouncer endpoint, **not** reachable from a laptop).
+Also set per app: `BETTER_AUTH_SECRET` (`openssl rand -base64 32`) and `BETTER_AUTH_URL`.
+
+**Running schema migrations** (after adding auth tables/columns) — cloud-only, in-container:
+
+```sh
+# The 256 MB VM OOM-kills tsx+better-auth (exit 137), so bump memory first:
+fly scale memory 1024 -a coba-test
+curl -s https://test.coba.games/health   # wake the suspended machine
+fly ssh console -a coba-test -C "npm run migrate"
+fly scale memory 256 -a coba-test        # restore (next `fly deploy` re-pins 256 from fly.toml anyway)
+```
+
+`npm run migrate` runs `server/migrate.ts`, which uses better-auth's own `getMigrations()` (so the
+migration logic always matches the installed runtime) and is idempotent. Prod uses the same flow
+against its own MPG cluster + secrets.
+
 ## DNS (one-time, at the coba.games registrar)
 
 Custom-domain certs are already created on Fly (`fly certs add ...`). They stay "Awaiting

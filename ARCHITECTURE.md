@@ -145,7 +145,7 @@ When a faction captures a territory (e.g. **Arcane Academy**), every member gain
 │                                                            │
 │  ┌──────────────────────────┐   ┌───────────────────────┐  │
 │  │ COLYSEUS (authoritative)  │   │ MANAGED POSTGRES       │  │
-│  │  · Match room state       │◄─►│  · Accounts (auth TBD) │  │
+│  │  · Match room state       │◄─►│  · Accounts (Better Auth)│ │
 │  │  · Simultaneous-turn      │   │  · Decks, heroes, prog │  │
 │  │    lock + resolution      │   │  · Faction map state   │  │
 │  │  · Anti-cheat arbitration │   │  · Match history       │  │
@@ -157,9 +157,14 @@ When a faction captures a territory (e.g. **Arcane Academy**), every member gain
 
 The rules engine is **shared code**: the same TypeScript module runs client-side (for responsive UI/prediction) and server-side in Colyseus (as the authority). Authoritative resolution always wins.
 
-### 4.3 Data model (initial sketch — Fly Postgres)
+### 4.3 Data model (Fly Managed Postgres)
 
-- `players` — auth, faction, cosmetics owned
+**Live as of A1 (2026-06-19):** Better Auth owns `user` / `session` / `account` / `verification`
+(created by its migration, see `IMPLEMENTATION_PLAN.md` Step 3). The sketch below is the remaining
+game-side schema to add as later phases land — a `profiles` row keyed off Better Auth's `user.id`
+replaces the old standalone `players` table:
+
+- `profiles` — game-side player data (faction, cosmetics owned), FK → Better Auth `user`
 - `heroes` — archetype definitions (static/seed data)
 - `cards` — card definitions, territory-pool tags
 - `decks` — player-owned, hero-bound

@@ -18,7 +18,7 @@ _Last updated: 2026-06-19._
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts` |
 | Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
 | Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
-| Auth + persistence | 🔜 **Decided (2026-06-19)** — Better Auth + Fly Managed Postgres (email+password; online-only gating). Build not started. | `server/`, `ARCHITECTURE.md §4.3` |
+| Auth + persistence | 🚧 **Phase A1 done (2026-06-19)** — Better Auth + Fly MPG live on staging (signup/login/session verified). Next: A2 client UI + online gating. | `server/auth.ts`, `server/index.ts`, `ARCHITECTURE.md §4.3` |
 | Hero/territory content | ✅ 6 heroes, 4 territories (≥4 target met; both old boards retuned) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
@@ -71,7 +71,7 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 
 1. ✅ **Card resolution engine** — done, balanced.
 2. ✅ **Graphical client (human vs bot)** — done.
-3. 🔜 **Auth + deck persistence** — *mechanism decided (2026-06-19): Better Auth + Fly Managed Postgres* (email+password; online-only gating). Ready to build (Phase A); see the Step 3 section.
+3. 🚧 **Auth + deck persistence** — *Better Auth + Fly Managed Postgres* (email+password; online-only gating). **Phase A1 (backend) shipped to staging 2026-06-19**; next is A2 (client UI + WS join gating). See the Step 3 section.
 4. ✅ **Second player (Colyseus)** — shipped, gaps closed, and now running on a **two-environment
    cloud setup** (staging + prod, custom domains). See the deployment milestone below.
 5. ⏳ **Hero abilities + territory modifiers** — *nearly done.* **5a ✅ 6 heroes** (5 design-target +
@@ -322,26 +322,46 @@ for online only** (anonymous bot play stays). Data model: `ARCHITECTURE.md §4.3
 → a `profiles` table keyed off Better Auth's `user`.
 
 **Phased build (staging-first, cloud-only):**
-- **Phase A (foundation):** provision MPG → `fly mpg attach` `DATABASE_URL` to staging `coba-test`
-  → add Better Auth (email+password, `pg` Pool) to `server/index.ts` → run its schema migration +
-  a `profiles` table → client signup/login screen + session + logout (`src/web/main.ts`, `net.ts`).
-  Gate online play behind login; bot stays anonymous.
+- **Phase A (foundation):**
+  - ✅ **A1 — backend (done 2026-06-19):** MPG cluster `coba-test-db` (id `1zqyxr7l8n7owp8m`, iad,
+    `basic`/development plan) provisioned + `fly mpg attach`ed to `coba-test` (`DATABASE_URL` →
+    pgbouncer endpoint). Better Auth (email+password, `pg` Pool) mounted in `server/index.ts` before
+    `express.json()` + the SPA catch-all (`server/auth.ts`). Schema migrated (`user/session/account/
+    verification` tables live in MPG). Secrets `BETTER_AUTH_SECRET` + `BETTER_AUTH_URL` set on
+    `coba-test`. Verified on staging: sign-up / sign-in / get-session (cookie ↔ null) all correct.
+  - 🔜 **A2 — client + gating (next):** signup/login/logout screen + session state in
+    `src/web/main.ts` (extend the `Screen` union) and `src/web/net.ts`; pass the session token on the
+    Colyseus join and verify it in `CobaRoom` (`onAuth`/`onJoin`) so **online** requires login while
+    bot play stays anonymous. Optional `profiles` table keyed off Better Auth's `user` (deferred until
+    a profile field is actually needed — base `user` row suffices for gating).
 - **Phase B:** record match outcomes to a `matches` table for logged-in players; show W/L (also the
   seed for the Step 6 faction tally).
 - **Phase C (later):** decks/cosmetics/faction columns — once deck-building and Step 6 exist (no
   point persisting "decks" while they're fixed per hero).
 
-**Integration notes (gathered 2026-06-19 — don't re-derive):**
-- Deps: `better-auth`, `pg`, `@types/pg`, dev `@better-auth/cli`. Project is ESM (Better Auth requires it).
-- Express mount: `import { toNodeHandler, fromNodeHeaders } from "better-auth/node"`; mount
+**Integration notes (A1 built 2026-06-19 — reflects what actually shipped):**
+- Deps added: `better-auth`, `pg`, dev `@types/pg`. (Skipped `@better-auth/cli` — its version lags
+  `better-auth`; see migrations below.) Project is ESM. `pg` is CJS → `import pg from "pg"; const
+  { Pool } = pg;` (same pattern as colyseus in `CobaRoom.ts`).
+- Express mount (in `server/index.ts`): `import { toNodeHandler } from "better-auth/node"`; mount
   `app.all("/api/auth/*", toNodeHandler(auth))` **before** `express.json()` **and before** the SPA
-  catch-all `app.get("*")` in `server/index.ts`. Session: `auth.api.getSession({ headers:
-  fromNodeHeaders(req.headers) })`. CORS needs `credentials: true` + explicit origin.
-- Better Auth accepts a `pg` `Pool` directly (built-in Kysely adapter). Needs `BETTER_AUTH_SECRET`
-  + baseURL/trustedOrigins (set as Fly secrets via `fly secrets set`).
-- **MPG is private-network only** — not reachable from a laptop. Run migrations from inside the Fly
-  app via `fly ssh` (`@better-auth/cli migrate`) or programmatically at boot; connect locally via
-  `fly mpg proxy` / `fly mpg connect` if needed.
+  catch-all `app.get("*")`. For A2 session checks: `auth.api.getSession({ headers:
+  fromNodeHeaders(req.headers) })` (`fromNodeHeaders` also from `better-auth/node`). CORS is
+  `credentials: true` + explicit origin list (no wildcard — can't carry cookies).
+- `server/auth.ts` holds the `betterAuth({...})` instance: `database: pool`, `emailAndPassword:
+  { enabled: true }`, `baseURL: BETTER_AUTH_URL`, `secret: BETTER_AUTH_SECRET`, explicit
+  `trustedOrigins`. Better Auth drives the `pg` Pool via its built-in Kysely adapter.
+- **Migrations — `server/migrate.ts` (run via `fly ssh`, NOT the CLI, NOT at boot):** uses
+  `getMigrations(auth.options)` from `better-auth/db/migration` so the migration logic always matches
+  the installed runtime (the standalone `@better-auth/cli` lags). Idempotent (creates only missing
+  tables/cols). Command: `fly ssh console -a coba-test -C "npm run migrate"`. ⚠️ **256 MB staging VM
+  OOM-kills tsx+better-auth (exit 137)** — temporarily `fly scale memory 1024 -a coba-test`, run the
+  migration, then `fly scale memory 256` (next `fly deploy` re-pins 256 from `fly.toml`). See DEPLOY.md.
+- **MPG is private-network only** — not reachable from a laptop. `DATABASE_URL` resolves only inside
+  the Fly app (that's why migrations run via `fly ssh`); connect locally via `fly mpg proxy`/`connect`
+  if ever needed.
+- **Online auth gating (A2 design point):** authenticate the Colyseus WS join — pass the Better
+  Auth session token and verify it server-side in `CobaRoom` (`onAuth`/`onJoin`).
 - **Online auth gating (open design point):** authenticate the Colyseus WS join — pass the Better
   Auth session token and verify it server-side in `CobaRoom` (`onAuth`/`onJoin`).
 - Fly **MPG** now provides HA + automated backups + connection pooling (the earlier backup/HA
