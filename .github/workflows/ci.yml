@@ -1,0 +1,38 @@
+# Cloud verification gate — replaces the (intentionally removed) local typecheck/bench.
+# Per CLAUDE.md the project is tested only in the cloud; this runs the static + balance
+# checks on GitHub's runners on every push/PR. See IMPLEMENTATION_PLAN.md "Non-blocking
+# quality/infra follow-ups".
+name: CI
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs on the same ref (e.g. rapid pushes) to save minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck + balance bench
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20 # matches Dockerfile (node:20-alpine)
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # The balance bench (src/sim.ts --bench) plays the full hero × territory matrix.
+      # It does not assert thresholds — it's a smoke gate (the engine runs every matchup
+      # without throwing) plus a visible win-rate table in the run log for balance review.
+      - name: Balance bench
+        run: npm run sim:bench
