@@ -117,14 +117,11 @@ Notes:
 - Apex `coba.games` → `www.coba.games` is a 301 app-level redirect in `server/index.ts` (keyed on
   the apex Host), not DNS — so the apex must point at the prod app and have its own cert.
 
-### Migrating prod from the old `coba-246` app
+### Prod migration from the old `coba-246` app — ✅ done (2026-06-20)
 
-Prod was previously the `coba-246` app serving the game on `www.coba.games`. We moved to a
-correctly-named `coba-prod` (Fly can't rename apps) and split www→marketing / app→game. Cutover:
-1. Provision `coba-prod` (done): app, dedicated IPs, `coba-prod-db` MPG, secrets, deploy, migrate,
-   certs for `app`/`www`/`coba.games`. Verified on `coba-prod.fly.dev`.
-2. **Repoint DNS** (above) so `app`/`www`/`@` → coba-prod's dedicated IPs.
-3. `fly certs check` all three → Issued; verify `app` (game+gating), `www` (marketing), apex (301).
-4. Only then decommission the old app: `fly certs remove www.coba.games -a coba-246`,
-   `fly certs remove coba.games -a coba-246`, `fly apps destroy coba-246` (and `coba-246`'s MPG, if
-   any was attached).
+Prod was previously the `coba-246` app serving the game on `www.coba.games`. It was moved to a
+correctly-named `coba-prod` (Fly can't rename apps) and split www→marketing / app→game. The cutover
+is complete: `coba-prod` provisioned (dedicated IPs, `coba-prod-db`, secrets, certs), DNS repointed,
+all three certs Issued and live sites verified, and **`coba-246` was destroyed**. Kept here as the
+runbook if a similar app rebuild/cutover is ever needed (provision → verify on `*.fly.dev` → repoint
+DNS to a dedicated IP → `fly certs check` → destroy the old app only after the new one validates).

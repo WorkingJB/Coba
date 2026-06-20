@@ -96,8 +96,9 @@ Moved prod to a correctly-named app and put a public face on the front door.
 - **Preview gating**: Better Auth signup rejects any email not approved in `preview_signups`
   (`databaseHooks.user.create.before`); approve via `npm run approve -- <email>`. Verified on
   staging *and* the prod DB (unapproved → 403, approved → 200).
-- **Remaining (needs registrar action):** repoint DNS `app`/`www`/`@` → coba-prod IPs, verify certs
-  Issued, then `fly apps destroy coba-246`. See `DEPLOY.md` → "Migrating prod from the old coba-246".
+- **Cutover complete (2026-06-20):** DNS repointed (`app`/`www`/`@` → coba-prod dedicated IPs), all
+  three certs Issued, live sites verified, **`coba-246` destroyed**. Cost trimmed to one MPG cluster
+  (`coba-prod-db`; `fly-db`=prod, `coba_staging`=staging) — old `coba-test-db` destroyed.
 
 ## ✅ Recently completed — Client UX from playtest (2026-06-19)
 
