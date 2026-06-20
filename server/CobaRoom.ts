@@ -7,6 +7,9 @@
 // named-export lexer can't see them, so default-import and destructure.
 import colyseus from "colyseus";
 import type { Client } from "colyseus";
+import type { IncomingMessage } from "http";
+import { fromNodeHeaders } from "better-auth/node";
+import { auth } from "./auth.js";
 import { initGame, resolveTurn, checkWinCondition } from "../src/engine.js";
 
 const { Room } = colyseus;
@@ -66,6 +69,20 @@ export class CobaRoom extends Room {
   private pending: Record<PlayerId, PlannedAction | null> = { P1: null, P2: null };
   /** Seats that have voted to rematch while phase === "ended". */
   private rematchVotes = new Set<PlayerId>();
+
+  // Online play requires a logged-in account (Step 3 / A2). Every CobaRoom is a
+  // networked room, so we gate every join here: validate the Better Auth session
+  // from the cookie on the matchmaking request. The SPA is same-origin with the
+  // auth API, so the browser sends the `__Secure-better-auth.session_token`
+  // cookie on this request automatically — no token plumbing on the client.
+  // Throwing rejects the join (Colyseus surfaces it as a server error). The bot
+  // mode never reaches the server, so anonymous bot play is unaffected.
+  override async onAuth(_client: Client, _options: JoinOptions, request?: IncomingMessage): Promise<{ id: string; name: string }> {
+    const headers = request ? fromNodeHeaders(request.headers) : new Headers();
+    const session = await auth.api.getSession({ headers });
+    if (!session) throw new Error("You must be signed in to play online.");
+    return { id: session.user.id, name: session.user.name };
+  }
 
   override onCreate(options: JoinOptions): void {
     this.maxClients = 2;

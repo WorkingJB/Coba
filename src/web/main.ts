@@ -19,14 +19,28 @@ import {
   opponentOf,
 } from "../types.js";
 import * as net from "./net.js";
+import * as auth from "./auth.js";
+import type { AuthUser } from "./auth.js";
 
 const REVEAL_MS = 1000; // beat between lock-in and resolution so the reveal is readable
 
 type Mode = "bot" | "online";
-type Screen = "menu" | "select" | "join" | "lobby" | "match";
+type Screen = "menu" | "auth" | "select" | "join" | "lobby" | "match";
 
 let mode: Mode = "bot";
 let screen: Screen = "menu";
+
+// Auth (Step 3 / A2). `session` is the signed-in user, or null. Online play is
+// gated on it; bot play ignores it entirely. `afterAuth` is the online action to
+// resume once login succeeds (so logging in doesn't lose the user's intent).
+let session: AuthUser | null = null;
+let authMode: "login" | "signup" = "login";
+let authEmail = "";
+let authPassword = "";
+let authName = "";
+let authError = "";
+let authBusy = false;
+let afterAuth: (() => void) | null = null;
 let seat: PlayerId = "P1"; // which side the local player controls
 let humanHeroId = "shade";
 let territoryId = "neutral_field";
@@ -94,6 +108,62 @@ function resetMatchUi(): void {
   oppRematchVoted = false;
   prevPoints = { P1: 0, P2: 0 };
   lastGain = { P1: 0, P2: 0 };
+}
+
+// ---------- flow: auth gating ----------
+
+// Run `next` immediately if signed in; otherwise stash it and route to the auth
+// screen — login/signup resumes it. Returns whether it ran (so callers can stop).
+function requireSession(next: () => void): boolean {
+  if (session) {
+    next();
+    return true;
+  }
+  afterAuth = next;
+  authError = "";
+  authMode = "login";
+  screen = "auth";
+  render();
+  return false;
+}
+
+async function submitAuth(): Promise<void> {
+  if (authBusy) return;
+  const email = authEmail.trim();
+  if (!email || !authPassword || (authMode === "signup" && !authName.trim())) {
+    authError = "Fill in every field.";
+    render();
+    return;
+  }
+  authBusy = true;
+  authError = "";
+  render();
+  try {
+    session =
+      authMode === "signup"
+        ? await auth.signUp(email, authPassword, authName.trim())
+        : await auth.signIn(email, authPassword);
+    authBusy = false;
+    authPassword = "";
+    const next = afterAuth;
+    afterAuth = null;
+    if (next) next();
+    else {
+      screen = "menu";
+      render();
+    }
+  } catch (e) {
+    authBusy = false;
+    authError = e instanceof Error ? e.message : "Something went wrong.";
+    render();
+  }
+}
+
+async function logOut(): Promise<void> {
+  await auth.signOut().catch(() => {});
+  session = null;
+  if (mode === "online") net.leave();
+  toMenu();
 }
 
 // ---------- flow: online ----------
@@ -494,33 +564,123 @@ function renderMenu(): void {
     render();
   });
   const quick = el("button", "btn btn-big", "Quick Match ▸");
-  quick.addEventListener("click", () => {
-    mode = "online";
-    autoQueue = true;
-    screen = "select";
-    render();
-  });
+  quick.addEventListener("click", () =>
+    requireSession(() => {
+      mode = "online";
+      autoQueue = true;
+      screen = "select";
+      render();
+    }),
+  );
   const create = el("button", "btn btn-big", "Create Room ▸");
-  create.addEventListener("click", () => {
-    mode = "online";
-    autoQueue = false;
-    screen = "select";
-    render();
-  });
+  create.addEventListener("click", () =>
+    requireSession(() => {
+      mode = "online";
+      autoQueue = false;
+      screen = "select";
+      render();
+    }),
+  );
   const join = el("button", "btn btn-big", "Join Room ▸");
-  join.addEventListener("click", () => {
-    mode = "online";
-    statusMsg = "";
-    screen = "join";
-    render();
-  });
+  join.addEventListener("click", () =>
+    requireSession(() => {
+      mode = "online";
+      statusMsg = "";
+      screen = "join";
+      render();
+    }),
+  );
   menu.appendChild(bot);
   menu.appendChild(quick);
   menu.appendChild(create);
   menu.appendChild(join);
   app.appendChild(menu);
 
+  // Account bar: who's signed in (+ logout), or a note that online needs login.
+  const account = el("div", "account");
+  if (session) {
+    account.appendChild(el("span", "account-who", `● Signed in as ${session.name}`));
+    const out = el("button", "btn btn-ghost btn-sm", "Log out");
+    out.addEventListener("click", logOut);
+    account.appendChild(out);
+  } else {
+    account.appendChild(el("span", "account-who muted", "Online play needs an account."));
+    const login = el("button", "btn btn-ghost btn-sm", "Log in / Sign up");
+    login.addEventListener("click", () =>
+      requireSession(() => {
+        screen = "menu";
+        render();
+      }),
+    );
+    account.appendChild(login);
+  }
+  app.appendChild(account);
+
   if (statusMsg) app.appendChild(el("div", "status", statusMsg));
+}
+
+// ---------- screen: auth (login / signup) ----------
+
+function renderAuth(): void {
+  app.innerHTML = "";
+  const signup = authMode === "signup";
+
+  const header = el("div", "header");
+  header.appendChild(el("h1", undefined, "COBA"));
+  header.appendChild(
+    el("div", "tagline", signup ? "Create an account to play online." : "Log in to play online."),
+  );
+  app.appendChild(header);
+
+  const form = el("div", "auth-form");
+
+  // name (signup only), email, password — each an .auth-field row.
+  function field(label: string, type: string, value: string, onInput: (v: string) => void, autocomplete: string): HTMLInputElement {
+    const wrap = el("label", "auth-field");
+    wrap.appendChild(el("span", "auth-label", label));
+    const input = document.createElement("input");
+    input.className = "auth-input";
+    input.type = type;
+    input.value = value;
+    input.setAttribute("autocomplete", autocomplete); // .autocomplete is the AutoFill union, not string
+    input.addEventListener("input", () => onInput(input.value));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") void submitAuth();
+    });
+    wrap.appendChild(input);
+    form.appendChild(wrap);
+    return input;
+  }
+
+  if (signup) field("Display name", "text", authName, (v) => (authName = v), "nickname");
+  field("Email", "email", authEmail, (v) => (authEmail = v), "email");
+  field("Password", "password", authPassword, (v) => (authPassword = v), signup ? "new-password" : "current-password");
+
+  app.appendChild(form);
+
+  if (authError) app.appendChild(el("div", "auth-error", authError));
+
+  const footer = el("div", "select-footer");
+  const submit = el("button", "btn btn-primary btn-big", authBusy ? "…" : signup ? "Create account ▸" : "Log in ▸");
+  if (authBusy) (submit as HTMLButtonElement).disabled = true;
+  submit.addEventListener("click", () => void submitAuth());
+  footer.appendChild(submit);
+
+  const toggle = el("button", "btn btn-ghost", signup ? "Have an account? Log in" : "Need an account? Sign up");
+  toggle.addEventListener("click", () => {
+    authMode = signup ? "login" : "signup";
+    authError = "";
+    render();
+  });
+  footer.appendChild(toggle);
+
+  const back = el("button", "btn btn-ghost", "↩ Back");
+  back.addEventListener("click", () => {
+    afterAuth = null;
+    toMenu();
+  });
+  footer.appendChild(back);
+  app.appendChild(footer);
 }
 
 // ---------- screen: hero select (bot match or online host) ----------
@@ -926,6 +1086,9 @@ function render(): void {
     case "menu":
       renderMenu();
       break;
+    case "auth":
+      renderAuth();
+      break;
     case "select":
       renderSelect();
       break;
@@ -942,3 +1105,13 @@ function render(): void {
 }
 
 render();
+
+// Restore an existing session on load (cookie may already be valid), then
+// re-render so the menu reflects the signed-in state without a flash of "logged
+// out". Failure just leaves us anonymous — bot play still works offline.
+void auth.getSession().then((u) => {
+  if (u) {
+    session = u;
+    if (screen === "menu") render();
+  }
+});

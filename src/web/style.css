@@ -298,6 +298,34 @@ body {
 .menu .btn-big { margin-left: 0; width: 100%; text-align: left; }
 .status { color: var(--muted); font-size: 13px; }
 
+/* ---- main menu: account bar ---- */
+.account {
+  display: flex; align-items: center; gap: 12px;
+  margin-top: 4px; max-width: 320px;
+  font-size: 12px;
+}
+.account-who { color: var(--you); }
+.account-who.muted { color: var(--muted); }
+
+/* ---- auth: login / signup ---- */
+.auth-form {
+  display: flex; flex-direction: column; gap: 10px;
+  max-width: 340px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+}
+.auth-field { display: flex; flex-direction: column; gap: 4px; }
+.auth-label { color: var(--muted); letter-spacing: 1px; font-size: 11px; text-transform: uppercase; }
+.auth-input {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 10px; font-family: inherit; font-size: 14px;
+}
+.auth-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.auth-error { color: var(--bot); font-size: 13px; max-width: 340px; }
+
 /* ---- join: room code entry ---- */
 .join-wrap { display: flex; flex-direction: column; gap: 8px; }
 .code-input {
