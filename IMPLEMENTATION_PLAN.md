@@ -18,7 +18,7 @@ _Last updated: 2026-06-19._
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts` |
 | Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
 | Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
-| Auth + persistence | 🚧 **Phase A1 done (2026-06-19)** — Better Auth + Fly MPG live on staging (signup/login/session verified). Next: A2 client UI + online gating. | `server/auth.ts`, `server/index.ts`, `ARCHITECTURE.md §4.3` |
+| Auth + persistence | 🚧 **Phase A done (2026-06-19)** — Better Auth + Fly MPG live on staging: signup/login/logout UI + online-play gating, all verified. Next: Phase B (record match outcomes). | `server/auth.ts`, `server/CobaRoom.ts`, `src/web/auth.ts` |
 | Hero/territory content | ✅ 6 heroes, 4 territories (≥4 target met; both old boards retuned) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
@@ -71,7 +71,7 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 
 1. ✅ **Card resolution engine** — done, balanced.
 2. ✅ **Graphical client (human vs bot)** — done.
-3. 🚧 **Auth + deck persistence** — *Better Auth + Fly Managed Postgres* (email+password; online-only gating). **Phase A1 (backend) shipped to staging 2026-06-19**; next is A2 (client UI + WS join gating). See the Step 3 section.
+3. 🚧 **Auth + deck persistence** — *Better Auth + Fly Managed Postgres* (email+password; online-only gating). **Phase A (backend + client UI + WS-join gating) shipped to staging 2026-06-19**; next is Phase B (record match outcomes). See the Step 3 section.
 4. ✅ **Second player (Colyseus)** — shipped, gaps closed, and now running on a **two-environment
    cloud setup** (staging + prod, custom domains). See the deployment milestone below.
 5. ⏳ **Hero abilities + territory modifiers** — *nearly done.* **5a ✅ 6 heroes** (5 design-target +
@@ -329,11 +329,17 @@ for online only** (anonymous bot play stays). Data model: `ARCHITECTURE.md §4.3
     `express.json()` + the SPA catch-all (`server/auth.ts`). Schema migrated (`user/session/account/
     verification` tables live in MPG). Secrets `BETTER_AUTH_SECRET` + `BETTER_AUTH_URL` set on
     `coba-test`. Verified on staging: sign-up / sign-in / get-session (cookie ↔ null) all correct.
-  - 🔜 **A2 — client + gating (next):** signup/login/logout screen + session state in
-    `src/web/main.ts` (extend the `Screen` union) and `src/web/net.ts`; pass the session token on the
-    Colyseus join and verify it in `CobaRoom` (`onAuth`/`onJoin`) so **online** requires login while
-    bot play stays anonymous. Optional `profiles` table keyed off Better Auth's `user` (deferred until
-    a profile field is actually needed — base `user` row suffices for gating).
+  - ✅ **A2 — client + gating (done 2026-06-19):** `src/web/auth.ts` (same-origin Better Auth client:
+    signUp/signIn/signOut/getSession, cookie-based). `src/web/main.ts`: new `auth` screen (login⇄signup),
+    `session` state, menu account bar (name + logout / login prompt), `requireSession()` gate on
+    Quick/Create/Join that routes to login then resumes intent; session restored from cookie on load.
+    Server `CobaRoom.onAuth` validates the Better Auth session from the WS-upgrade cookie
+    (`fromNodeHeaders` → `auth.api.getSession`) and rejects anonymous joins; bot play never hits the
+    server so it stays anonymous. **Verified on staging:** anonymous WS join → rejected (`4216`);
+    authenticated join (cookie on upgrade) → joins. Browser sign-in sends `Origin` (in `trustedOrigins`)
+    → 200; header-less server-side calls 403 (`MISSING_OR_NULL_ORIGIN`) — browser-only client is unaffected.
+    No `profiles` table yet — base Better Auth `user` row suffices for gating (add when a profile field
+    is actually needed).
 - **Phase B:** record match outcomes to a `matches` table for logged-in players; show W/L (also the
   seed for the Step 6 faction tally).
 - **Phase C (later):** decks/cosmetics/faction columns — once deck-building and Step 6 exist (no
