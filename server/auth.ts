@@ -8,16 +8,8 @@
 // server/migrate.ts (run in-container via `fly ssh`), NOT at boot.
 
 import { betterAuth } from "better-auth";
-// pg is CommonJS — default-import then destructure (same pattern as colyseus in
-// CobaRoom.ts), because Node's ESM named-export lexer can't see CJS exports.
-import pg from "pg";
-
-const { Pool } = pg;
-
-// One shared pool for the process. DATABASE_URL points at MPG's pgbouncer
-// endpoint (transaction pooling); node-postgres uses unnamed prepared
-// statements, which transaction pooling supports, so this is safe at runtime.
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { APIError } from "better-auth/api";
+import { pool, isApprovedEmail } from "./db.js";
 
 export const auth = betterAuth({
   database: pool,
@@ -26,13 +18,35 @@ export const auth = betterAuth({
   baseURL: process.env.BETTER_AUTH_URL,
   secret: process.env.BETTER_AUTH_SECRET,
   emailAndPassword: { enabled: true },
-  // The SPA and the auth API are same-origin in every deployed environment, but
-  // list the real hosts explicitly so origin checks never depend on inference.
+  // The game SPA and the auth API are same-origin on app.coba.games; list the
+  // real hosts explicitly so origin checks never depend on inference. (www is
+  // the marketing site — no auth there — but it's kept for the staging mirror.)
   trustedOrigins: [
+    "https://app.coba.games",
     "https://test.coba.games",
     "https://www.coba.games",
+    "https://www-test.coba.games",
     "https://coba.games",
+    "https://coba-prod.fly.dev",
     "https://coba-test.fly.dev",
-    "https://coba-246.fly.dev",
   ],
+  // Preview gating: signup is allowed ONLY for emails on the approved waitlist
+  // (preview_signups). The before-hook runs inside the create transaction, so a
+  // throw aborts account creation regardless of which client called — this is
+  // the authoritative gate, not a client-side check.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => {
+          if (!(await isApprovedEmail(user.email))) {
+            throw new APIError("FORBIDDEN", {
+              message:
+                "This email isn't approved for the preview yet — join the waitlist at www.coba.games.",
+            });
+          }
+          return { data: user };
+        },
+      },
+    },
+  },
 });

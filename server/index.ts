@@ -11,6 +11,7 @@ import wsTransport from "@colyseus/ws-transport";
 import { toNodeHandler } from "better-auth/node";
 import { CobaRoom } from "./CobaRoom.js";
 import { auth } from "./auth.js";
+import { pool } from "./db.js";
 
 // CommonJS deps — default-import and destructure (see CobaRoom.ts).
 const { Server } = colyseus;
@@ -20,6 +21,20 @@ const PORT = Number(process.env.PORT ?? 2567);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.resolve(__dirname, "../dist");
 
+// Host-based routing: APP_HOSTS lists the hosts that serve the GAME (app SPA +
+// Colyseus + auth). Every other host (www, apex) gets the marketing "coming
+// soon" page. Config-driven so staging (test.coba.games) and prod
+// (app.coba.games) share one image. Defaults cover prod if the env is unset.
+const APP_HOSTS = (process.env.APP_HOSTS ?? "app.coba.games,coba-prod.fly.dev")
+  .split(",")
+  .map((h) => h.trim().toLowerCase())
+  .filter(Boolean);
+const hostOf = (req: express.Request) => req.headers.host?.split(":")[0].toLowerCase() ?? "";
+const isAppHost = (req: express.Request) => APP_HOSTS.includes(hostOf(req));
+
+// Basic RFC-ish email shape check for the public waitlist endpoint.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const app = express();
 // Auth needs credentialed CORS with explicit origins (a wildcard origin can't
 // carry cookies). Same-origin in every deployed env, so this only matters for
@@ -27,8 +42,10 @@ const app = express();
 app.use(
   cors({
     origin: [
+      "https://app.coba.games",
       "https://test.coba.games",
       "https://www.coba.games",
+      "https://www-test.coba.games",
       "https://coba.games",
       "http://localhost:5173",
     ],
@@ -43,21 +60,48 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 app.all("/api/auth/*", toNodeHandler(auth));
 app.use(express.json());
 
-// Canonical host: 301 the apex (coba.games) → www.coba.games, preserving path +
-// query. The prod app serves www, so this just collapses the bare domain onto
-// it. Apex-specific, so coba-246.fly.dev and the staging host are untouched.
+// Preview waitlist. Public, unauthenticated. Stores the email on the marketing
+// site's "join the preview" form; you approve it later (npm run approve) and
+// only then can that email create an account (gate in server/auth.ts). The
+// response is intentionally uniform so it never leaks whether an email is new.
+app.post("/api/waitlist", async (req, res) => {
+  const email = String((req.body as { email?: unknown })?.email ?? "").trim();
+  if (!EMAIL_RE.test(email) || email.length > 254) {
+    res.status(400).json({ ok: false, message: "Please enter a valid email address." });
+    return;
+  }
+  try {
+    await pool.query(
+      "INSERT INTO preview_signups (email) VALUES ($1) ON CONFLICT (email) DO NOTHING",
+      [email],
+    );
+    res.json({ ok: true, message: "You're on the list — we'll email you when your preview is ready." });
+  } catch (err) {
+    console.error("waitlist insert failed", err);
+    res.status(500).json({ ok: false, message: "Something went wrong. Please try again." });
+  }
+});
+
+// Canonical host: 301 the apex (coba.games) → www.coba.games (the marketing
+// site), preserving path + query. Apex-specific, so the *.fly.dev and game
+// hosts are untouched.
 app.use((req, res, next) => {
-  if (req.headers.host?.split(":")[0] === "coba.games") {
+  if (hostOf(req) === "coba.games") {
     res.redirect(301, `https://www.coba.games${req.url}`);
     return;
   }
   next();
 });
 
-// Serve the built client in production (dist/ exists after `vite build`).
-// In dev the client is served by Vite and this is simply absent.
-app.use(express.static(DIST));
-app.get("*", (_req, res) => res.sendFile(path.join(DIST, "index.html")));
+// Serve built assets (dist/ exists after `vite build`). index:false so `/`
+// falls through to the host-aware catch-all below instead of auto-serving the
+// game's index.html on every host.
+app.use(express.static(DIST, { index: false }));
+// Host routing: game hosts get the SPA (dist/index.html); www/apex get the
+// marketing page (dist/marketing.html). See APP_HOSTS above.
+app.get("*", (req, res) => {
+  res.sendFile(path.join(DIST, isAppHost(req) ? "index.html" : "marketing.html"));
+});
 
 const httpServer = createServer(app);
 const gameServer = new Server({ transport: new WebSocketTransport({ server: httpServer }) });

@@ -10,6 +10,7 @@
 
 import { getMigrations } from "better-auth/db/migration";
 import { auth } from "./auth.js";
+import { pool } from "./db.js";
 
 const { toBeCreated, toBeAdded, runMigrations } = await getMigrations(auth.options);
 
@@ -21,5 +22,18 @@ if (tables.length === 0) {
   await runMigrations();
   console.log("Better Auth migrations applied.");
 }
+
+// Preview waitlist table (not part of Better Auth's schema, so migrate it here).
+// Idempotent — safe to re-run after every deploy, same as the auth migrations.
+await pool.query(`
+  CREATE TABLE IF NOT EXISTS preview_signups (
+    id          bigserial PRIMARY KEY,
+    email       text UNIQUE NOT NULL,
+    approved    boolean NOT NULL DEFAULT false,
+    created_at  timestamptz NOT NULL DEFAULT now(),
+    approved_at timestamptz
+  )
+`);
+console.log("preview_signups table ready.");
 
 process.exit(0);

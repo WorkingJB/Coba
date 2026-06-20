@@ -14,6 +14,7 @@
     "sim": "tsx src/sim.ts",
     "sim:bench": "tsx src/sim.ts --bench",
     "migrate": "tsx server/migrate.ts",
+    "approve": "tsx server/approve.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
