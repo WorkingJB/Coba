@@ -23,8 +23,8 @@ The prod app serves **two surfaces from one process**, chosen by the request's `
 
 Which hosts are "game" hosts is the **`APP_HOSTS` secret** (comma list); everything else falls
 through to the marketing page (`server/index.ts`). Set per app:
-- prod `coba-prod`: `APP_HOSTS="app.coba.games,coba-prod.fly.dev"`
-- staging `coba-test`: `APP_HOSTS="test.coba.games,coba-test.fly.dev"` (so `test.coba.games` stays
+- prod `coba-prod`: `APP_HOSTS="app.coba.games,coba-prod.fly.dev"` (DB `fly-db`)
+- staging `coba-test`: `APP_HOSTS="test.coba.games,coba-test.fly.dev"` (DB `coba_staging`; so `test.coba.games` stays
   the game; test the marketing branch with a `Host:` override, e.g.
   `curl -H "Host: www.coba.games" https://coba-test.fly.dev/`, or add an optional
   `www-test.coba.games` cert+DNS).
@@ -37,6 +37,8 @@ Vite builds **both** pages (`vite.config.ts` multi-page input): `dist/index.html
 `www.coba.games` captures preview signups; only **approved** emails can create a game account.
 
 - `POST /api/waitlist {email}` → row in `preview_signups` (`approved=false`).
+- List: `fly ssh console -a coba-prod -C "npm run waitlist"` (approved first). Or
+  `fly mpg connect --cluster w867508y2z7r3pk4` → `SELECT … FROM preview_signups;`.
 - Approve: `fly ssh console -a coba-prod -C "npm run approve -- someone@example.com"` (idempotent
   upsert → `approved=true`). Raw SQL: `UPDATE preview_signups SET approved=true, approved_at=now()
   WHERE lower(email)=lower('…');`
@@ -57,13 +59,16 @@ must work offline: `npm install`.
 
 ## Auth database (Fly Managed Postgres) & migrations
 
-Better Auth (and the `preview_signups` waitlist table) persist to **Fly Managed Postgres**. Each
-env has its **own** cluster, `fly mpg attach`ed to its app → injects the `DATABASE_URL` secret (a
-private-network pgbouncer endpoint, **not** reachable from a laptop):
-- Staging: `coba-test-db` (id `1zqyxr7l8n7owp8m`, iad) → `coba-test`.
-- Production: `coba-prod-db` (id `w867508y2z7r3pk4`, iad, Basic plan) → `coba-prod`.
+Better Auth (and the `preview_signups` waitlist table) persist to **Fly Managed Postgres**. To keep
+cost down there is **one cluster** — `coba-prod-db` (id `w867508y2z7r3pk4`, iad, Basic ~$38/mo) —
+with a **separate database per env** (full data isolation, half the cost of two clusters):
+- Production: database `fly-db` — `fly mpg attach`ed to `coba-prod` (injects `DATABASE_URL`).
+- Staging: database `coba_staging` (`fly mpg databases create … --name coba_staging`) — `coba-test`'s
+  `DATABASE_URL` is set **manually** to the same pgbouncer host with `/coba_staging` (not attached,
+  so it survives; `fly mpg attach` would point at `fly-db`).
 
-Also set per app: `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), `BETTER_AUTH_URL`
+`DATABASE_URL` is a private-network pgbouncer endpoint, **not** reachable from a laptop. Also set per
+app: `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), `BETTER_AUTH_URL`
 (prod = `https://app.coba.games`), and `APP_HOSTS` (see host-routing above).
 
 **Running schema migrations** (after adding auth tables/columns) — cloud-only, in-container:
