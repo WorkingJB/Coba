@@ -1,9 +1,11 @@
 # Coba — PRODUCTION. Deploy with:  fly deploy --ha=false
 # Single Fly app: the Colyseus match server + the built web client.
-# Serves https://www.coba.games (custom domain) and coba-246.fly.dev.
-# Staging lives in fly.staging.toml (app coba-test → test.coba.games).
-# Testing happens on STAGING first — never deploy straight to prod. See DEPLOY.md.
-app = "coba-246"
+# Host-routed (APP_HOSTS secret): the GAME at https://app.coba.games and the
+# coming-soon marketing site at https://www.coba.games (+ apex coba.games → www).
+# Also reachable at coba-prod.fly.dev. Staging lives in fly.staging.toml
+# (app coba-test → test.coba.games). Test on STAGING first — never straight to
+# prod. See DEPLOY.md.
+app = "coba-prod"
 primary_region = "iad"
 
 [build]

@@ -16,7 +16,8 @@ Pure TS engine (`src/engine.ts`) shared by the simulator, web client, and author
   `vite`, or `tsx`-running the app. No `localhost` testing.
 - **To verify a change:** deploy to **staging** and test there.
   - Staging: `fly deploy -c fly.staging.toml --ha=false` → **https://test.coba.games**
-  - Production (only after staging looks good): `fly deploy --ha=false` → **https://www.coba.games**
+  - Production (only after staging looks good): `fly deploy --ha=false` (app `coba-prod`) → game
+    **https://app.coba.games**, marketing **https://www.coba.games** (host-routed; see DEPLOY.md).
 - `node_modules` and `dist` are intentionally **not** kept locally — the Docker image builds them
   in-container, so deploys don't need them. Don't reinstall deps to run things locally.
 - Editing code, reading files, and `git` are of course still local. It's *running/testing* that
@@ -30,6 +31,8 @@ deploy + DNS runbook.
 - `src/engine.ts` — pure rules engine (state in → state out). Shared everywhere.
 - `src/cards.ts`, `src/heroes.ts`, `src/territory.ts` — content (data). 5 heroes, 3 territories.
 - `src/bot.ts` — greedy reference bot (used by the balance sim; one move ahead).
-- `src/web/` — Vite + DOM client. `server/` — authoritative Colyseus room + static host.
+- `src/web/` — Vite + DOM game client. `src/marketing/` + `marketing.html` — the www coming-soon
+  page (waitlist). `server/` — authoritative Colyseus room + static host, host-routed (app=game,
+  www=marketing), Better Auth + waitlist/`preview_signups` (`server/auth.ts`, `server/db.ts`).
 - `src/sim.ts` — balance harness (`npm run sim:bench`). It's a local node tool, but per the rule
   above, treat balance verification as a cloud/CI concern going forward rather than a local run.

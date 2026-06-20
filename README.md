@@ -7,8 +7,8 @@ the full design). This repo has progressed through **Build Sequence step 4** of 
 | --- | --- | --- |
 | 1 | Pure card-resolution engine (console only) | ✅ `src/`, `npm run sim` |
 | 2 | Browser client, human vs bot (DOM, no backend) | ✅ `src/web/`, `npm run dev` |
-| 3 | Auth + deck persistence | ⏳ deferred (not needed for testing) |
-| 4 | Networked human-vs-human (Colyseus, room codes) | ✅ **live at https://coba-246.fly.dev** |
+| 3 | Auth + deck persistence | 🚧 Phase A live (Better Auth + MPG, online gating, **preview allowlist**) |
+| 4 | Networked human-vs-human (Colyseus, room codes) | ✅ **live at https://app.coba.games** |
 | 5 | Hero abilities + territory modifiers | ⏳ started early |
 | 6 | Faction war map | — last |
 
@@ -119,8 +119,8 @@ engine (the engine stays the shared authority).
 
 ## Multiplayer (step 4) — human vs human
 
-**Live at https://coba-246.fly.dev** — open it in two places, one **Create Room**, one
-**Join Room** with the shared code.
+**Live at https://app.coba.games** — open it in two places, one **Create Room**, one
+**Join Room** with the shared code. (`www.coba.games` is the coming-soon/waitlist page.)
 
 An authoritative [Colyseus](https://colyseus.io) server (`server/`) reuses the **same**
 `src/engine.ts` as the simulator and bot client — resolution only ever happens on the
@@ -163,14 +163,18 @@ runs entirely client-side with no server.
 
 ### Deploy to Fly.io (over-the-internet testing)
 
+> **Authoritative runbook is [`DEPLOY.md`](./DEPLOY.md).** Prod is now app **`coba-prod`**
+> (host-routed: game at `app.coba.games`, marketing at `www.coba.games`); staging is `coba-test`.
+> The old single `coba-246` app is being decommissioned. The notes below are the original
+> single-app sketch, kept for context.
+
 One app serves both the websocket traffic and the built client. The `Dockerfile` runs
-`vite build` then `npm run start`. Already provisioned: app **`coba-246`** in org
-`coba-246`, region `iad`.
+`vite build` then `npm run start`.
 
 ```bash
-fly deploy --ha=false    # build image + ship as a SINGLE machine
-fly logs                 # tail server output
-fly open                 # open https://coba-246.fly.dev
+fly deploy --ha=false    # build image + ship as a SINGLE machine (app coba-prod)
+fly logs -a coba-prod    # tail server output
+fly open -a coba-prod    # open https://coba-prod.fly.dev
 ```
 
 > **`--ha=false` is required.** Match rooms are in-memory, so both players must hit the

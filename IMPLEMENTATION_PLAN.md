@@ -16,9 +16,10 @@ _Last updated: 2026-06-19._
 | --- | --- | --- |
 | Pure card engine | ✅ Validated, balanced (~47–49% mirrors) | `src/engine.ts`, `src/sim.ts` |
 | Web client (vs bot) | ✅ Working, DOM/Vite | `src/web/main.ts` |
-| Online multiplayer | ✅ **Live** — prod https://www.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
-| Cloud deploy / environments | ✅ Two-env Fly setup, custom domains live | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
-| Auth + persistence | 🚧 **Phase A done (2026-06-19)** — Better Auth + Fly MPG live on staging: signup/login/logout UI + online-play gating, all verified. Next: Phase B (record match outcomes). | `server/auth.ts`, `server/CobaRoom.ts`, `src/web/auth.ts` |
+| Online multiplayer | ✅ **Live** — prod game https://app.coba.games, staging https://test.coba.games | `server/`, `src/web/net.ts` |
+| Cloud deploy / environments | ✅ Two-env Fly setup; prod is `coba-prod` (host-routed app/www), staging `coba-test` | `fly.toml`, `fly.staging.toml`, `DEPLOY.md` |
+| Marketing + preview gating | ✅ **Done (2026-06-20)** — www coming-soon page + waitlist (`preview_signups`); signup gated to approved emails. | `marketing.html`, `src/marketing/`, `server/auth.ts`, `server/db.ts` |
+| Auth + persistence | 🚧 **Phase A done (2026-06-19)** — Better Auth + Fly MPG live: signup/login/logout UI + online-play gating, all verified. **Preview-allowlist gate added 2026-06-20.** Next: Phase B (record match outcomes). | `server/auth.ts`, `server/CobaRoom.ts`, `src/web/auth.ts` |
 | Hero/territory content | ✅ 6 heroes, 4 territories (≥4 target met; both old boards retuned) | `src/heroes.ts`, `src/territory.ts` |
 | Faction war map | 🔲 Not started (build last) | — |
 
@@ -26,7 +27,7 @@ _Last updated: 2026-06-19._
 run local dev/server/sim. To verify a change, deploy to **staging** and test the URL:
 ```bash
 fly deploy -c fly.staging.toml --ha=false   # → https://test.coba.games  (test here)
-fly deploy --ha=false                        # → https://www.coba.games   (prod, after staging)
+fly deploy --ha=false                        # → app coba-prod: game app.coba.games + www marketing
 ```
 `node_modules`/`dist` are intentionally not kept locally (Docker builds them in-container). The
 balance sim (`npm run sim:bench`) is now a cloud/CI concern, not a local run — automated via
@@ -80,6 +81,23 @@ GitHub Actions (`.github/workflows/ci.yml`): typecheck + bench on every push/PR.
 6. 🔲 **Faction war map** — built last, on the proven loop.
 
 ---
+
+## ✅ Recently completed — `coba-prod` + coming-soon site + preview gating (2026-06-20)
+
+Moved prod to a correctly-named app and put a public face on the front door.
+
+- **New prod app `coba-prod`** (Fly can't rename; old prod was `coba-246`). Dedicated IPs
+  (`137.66.50.236` / `2a09:8280:1::12f:f55b:0`), own MPG cluster `coba-prod-db`, secrets, certs for
+  `app`/`www`/`coba.games`. Verified end-to-end on `coba-prod.fly.dev`.
+- **Host-based routing** (`APP_HOSTS` secret, `server/index.ts`): the **game** now lives at
+  **`app.coba.games`**, the **coming-soon marketing page** at **`www.coba.games`**, apex 301→www.
+- **Coming-soon site** (`marketing.html` + `src/marketing/`, Vite multi-page): overview + a
+  **waitlist** form (`POST /api/waitlist` → `preview_signups`) + "already approved → app.coba.games".
+- **Preview gating**: Better Auth signup rejects any email not approved in `preview_signups`
+  (`databaseHooks.user.create.before`); approve via `npm run approve -- <email>`. Verified on
+  staging *and* the prod DB (unapproved → 403, approved → 200).
+- **Remaining (needs registrar action):** repoint DNS `app`/`www`/`@` → coba-prod IPs, verify certs
+  Issued, then `fly apps destroy coba-246`. See `DEPLOY.md` → "Migrating prod from the old coba-246".
 
 ## ✅ Recently completed — Client UX from playtest (2026-06-19)
 
