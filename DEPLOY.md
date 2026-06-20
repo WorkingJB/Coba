@@ -88,19 +88,19 @@ against its own MPG cluster + secrets.
 ## DNS (at the coba.games registrar)
 
 Custom-domain certs are created on Fly (`fly certs add … -a <app>`). They stay "Awaiting
-configuration" until these records exist. **`coba-prod` uses dedicated IPs**, so all three prod
-hostnames point at the same pair (a dedicated IP also avoids SNI ambiguity while two apps exist):
+configuration" until these records exist. `coba-prod` uses Fly's **shared IPv4** (free; routes by
+SNI) + a free **dedicated IPv6**, so all three prod hostnames point at the same pair:
 
-| coba-prod dedicated | value |
+| coba-prod | value |
 | --- | --- |
-| A (v4) | `137.66.50.236` |
+| A (v4, shared) | `66.241.124.232` |
 | AAAA (v6) | `2a09:8280:1::12f:f55b:0` |
 
 **Production (all → coba-prod):**
 ```
-A     app   137.66.50.236     AAAA  app   2a09:8280:1::12f:f55b:0   # the game
-A     www   137.66.50.236     AAAA  www   2a09:8280:1::12f:f55b:0   # marketing
-A     @     137.66.50.236     AAAA  @     2a09:8280:1::12f:f55b:0   # apex → 301 www
+A     app   66.241.124.232    AAAA  app   2a09:8280:1::12f:f55b:0   # the game
+A     www   66.241.124.232    AAAA  www   2a09:8280:1::12f:f55b:0   # marketing
+A     @     66.241.124.232    AAAA  @     2a09:8280:1::12f:f55b:0   # apex → 301 www
 ```
 
 **Staging — `test.coba.games`** (unchanged):
@@ -113,7 +113,9 @@ Then check issuance: `fly certs check app.coba.games` (and `www.coba.games`, `co
 Let's Encrypt validates automatically once DNS resolves (usually a few minutes).
 
 Notes:
-- The prod IPs are **dedicated** (`fly ips list -a coba-prod`); `test` uses Fly shared addresses.
+- Current IPs: `fly ips list -a coba-prod` / `-a coba-test`. Prod ran on a dedicated IPv4 only during
+  the coba-246 cutover (to avoid SNI ambiguity while both apps held the certs); once coba-246 was
+  destroyed it was released for the free shared IPv4 — one app per hostname routes fine by SNI.
 - Apex `coba.games` → `www.coba.games` is a 301 app-level redirect in `server/index.ts` (keyed on
   the apex Host), not DNS — so the apex must point at the prod app and have its own cert.
 
