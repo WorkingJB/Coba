@@ -338,8 +338,9 @@ for online only** (anonymous bot play stays). Data model: `ARCHITECTURE.md §4.3
     server so it stays anonymous. **Verified on staging:** anonymous WS join → rejected (`4216`);
     authenticated join (cookie on upgrade) → joins. Browser sign-in sends `Origin` (in `trustedOrigins`)
     → 200; header-less server-side calls 403 (`MISSING_OR_NULL_ORIGIN`) — browser-only client is unaffected.
-    No `profiles` table yet — base Better Auth `user` row suffices for gating (add when a profile field
-    is actually needed).
+    **Browser playtest confirmed (2026-06-19):** logged-out "Create Room" bounces to login, then drops
+    into hero-select after auth. No `profiles` table yet — base Better Auth `user` row suffices for gating
+    (add when a profile field is actually needed).
 - **Phase B:** record match outcomes to a `matches` table for logged-in players; show W/L (also the
   seed for the Step 6 faction tally).
 - **Phase C (later):** decks/cosmetics/faction columns — once deck-building and Step 6 exist (no

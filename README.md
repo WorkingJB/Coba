@@ -128,6 +128,11 @@ server. Players match via a short **room code** (host creates, opponent joins). 
 server owns the RNG and **redacts each player's view** so the opponent's hand never
 crosses the wire. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §4.
 
+**Online play requires an account** (email + password, via [Better Auth](https://better-auth.com)):
+the server gates every match join on a valid session (`CobaRoom.onAuth`). **Play vs Bot stays
+anonymous** — it never touches the server. See [`ARCHITECTURE.md`](./ARCHITECTURE.md) §6.3 and
+[`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) Step 3.
+
 ### Protocol (client ⇄ server)
 
 | Message | Dir | Payload |
