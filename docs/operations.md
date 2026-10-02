@@ -22,15 +22,15 @@ The container runs as a non-root user. The database pool is capped at ten per pr
 
 ## Failure behavior
 
-| Event | Expected behavior | Operator response |
-| --- | --- | --- |
-| API process dies before transaction commit | No receipt; retry can apply once | Load balancer removes replica; investigate crash |
-| Response lost after commit | Same command ID returns current authorized state | Client retries saved envelope; no manual replay |
-| Both clients disconnect | Deadline sweeper passes missing turns; three consecutive misses end match | No room process needs to survive |
-| All sweepers pause | Due turns wait; one turn resolves after recovery, with a fresh planning window | Alert on oldest due deadline; restore capacity |
-| PostgreSQL unavailable | API returns temporary failure; readiness fails | Recover/fail over DB; never use a temporary in-memory match store |
-| Result consumer unavailable | Terminal match and outbox entry remain durable | Retry consumer later with ledger dedupe |
-| Browser cookie deleted/expires | Anonymous seat cannot be recovered | Known private-alpha limit; durable identity is a public-alpha blocker |
+| Event                                      | Expected behavior                                                              | Operator response                                                     |
+| ------------------------------------------ | ------------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| API process dies before transaction commit | No receipt; retry can apply once                                               | Load balancer removes replica; investigate crash                      |
+| Response lost after commit                 | Same command ID returns current authorized state                               | Client retries saved envelope; no manual replay                       |
+| Both clients disconnect                    | Deadline sweeper passes missing turns; three consecutive misses end match      | No room process needs to survive                                      |
+| All sweepers pause                         | Due turns wait; one turn resolves after recovery, with a fresh planning window | Alert on oldest due deadline; restore capacity                        |
+| PostgreSQL unavailable                     | API returns temporary failure; readiness fails                                 | Recover/fail over DB; never use a temporary in-memory match store     |
+| Result consumer unavailable                | Terminal match and outbox entry remain durable                                 | Retry consumer later with ledger dedupe                               |
+| Browser cookie deleted/expires             | Anonymous seat cannot be recovered                                             | Known private-alpha limit; durable identity is a public-alpha blocker |
 
 ## Security / retention work before public access
 

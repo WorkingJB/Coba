@@ -2,13 +2,13 @@
 
 Sequence by evidence and exit gates, not a promised launch date. Approximate months assume a small team; re-estimate after the first playtests.
 
-| Stage | Deliverables | Exit gate |
-| --- | --- | --- |
-| Foundation — this change | Archived POC, new engine/API/client, durable commands/deadlines/results, private invites, cloud CI | Rules, DB concurrency/recovery, browser flow, responsive layout, and image build pass |
-| Month 1 — playable private alpha | New staging stack, account provider integration, tutorial/bot, rematch, history/replay tooling, metrics, two heroes tuned by people | 20+ complete playtest sessions; server kill/deploy does not lose a committed move; documented restore drill |
-| Month 2 — social multiplayer | Parties, 2v2 client/queues, team pings, matchmaking/rating, region policy, accessibility/device polish | Four-player games, reconnects, unfair match prevention, no hidden-information leaks; players report coordination is worthwhile |
-| Month 3 — faction alpha | Seasonal faction choice, small territory map, result consumer/ledger, capped contribution, anti-collusion, cosmetic progression | Duplicate delivery never double-rewards; campaign remains fair with uneven populations; outcome audit/reversal tooling works |
-| Month 4+ — production beta | Multi-AZ infrastructure as code, SLO alerts, load/soak/chaos tests, content pipeline, account recovery/deletion, moderation, mobile profiling | Capacity and failure budgets met at ≥2× forecast peak; on-call and rollback/restore rehearsed; product retention supports expansion |
+| Stage                            | Deliverables                                                                                                                                  | Exit gate                                                                                                                           |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Foundation — this change         | Archived POC, new engine/API/client, durable commands/deadlines/results, private invites, cloud CI                                            | Rules, DB concurrency/recovery, browser flow, responsive layout, and image build pass                                               |
+| Month 1 — playable private alpha | New staging stack, account provider integration, tutorial/bot, rematch, history/replay tooling, metrics, two heroes tuned by people           | 20+ complete playtest sessions; server kill/deploy does not lose a committed move; documented restore drill                         |
+| Month 2 — social multiplayer     | Parties, 2v2 client/queues, team pings, matchmaking/rating, region policy, accessibility/device polish                                        | Four-player games, reconnects, unfair match prevention, no hidden-information leaks; players report coordination is worthwhile      |
+| Month 3 — faction alpha          | Seasonal faction choice, small territory map, result consumer/ledger, capped contribution, anti-collusion, cosmetic progression               | Duplicate delivery never double-rewards; campaign remains fair with uneven populations; outcome audit/reversal tooling works        |
+| Month 4+ — production beta       | Multi-AZ infrastructure as code, SLO alerts, load/soak/chaos tests, content pipeline, account recovery/deletion, moderation, mobile profiling | Capacity and failure budgets met at ≥2× forecast peak; on-call and rollback/restore rehearsed; product retention supports expansion |
 
 ## Public alpha blockers
 

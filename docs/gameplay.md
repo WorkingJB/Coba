@@ -20,13 +20,13 @@ Fifteen points, sixteen turns, and the new card numbers are experimental, not in
 
 ## Repeated loop
 
-| Horizon | Player action | Payoff | State of implementation |
-| --- | --- | --- | --- |
-| One turn | Predict a rival, choose a contested position | Understand why a zone flipped | Implemented |
-| One match | Adapt across three zones | Win/loss, readable exchange history | Implemented |
-| One session | Change hero, invite a rival, try again | Discover a counterplay pattern | New room flow; direct rematch/tutorial/bot next |
-| One day | Join friends in a campaign objective | Visible capped faction contribution | Designed, not implemented |
-| One season | Commit to faction and complete cooperative goals | Cosmetics, identity, story changes | Designed, not implemented |
+| Horizon     | Player action                                    | Payoff                              | State of implementation                         |
+| ----------- | ------------------------------------------------ | ----------------------------------- | ----------------------------------------------- |
+| One turn    | Predict a rival, choose a contested position     | Understand why a zone flipped       | Implemented                                     |
+| One match   | Adapt across three zones                         | Win/loss, readable exchange history | Implemented                                     |
+| One session | Change hero, invite a rival, try again           | Discover a counterplay pattern      | New room flow; direct rematch/tutorial/bot next |
+| One day     | Join friends in a campaign objective             | Visible capped faction contribution | Designed, not implemented                       |
+| One season  | Commit to faction and complete cooperative goals | Cosmetics, identity, story changes  | Designed, not implemented                       |
 
 ## 2v2 direction
 

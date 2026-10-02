@@ -14,13 +14,13 @@ A fresh implementation of Coba: a simultaneous-turn tactical card battler over t
 
 ## Repository
 
-| Path | Responsibility |
-| --- | --- |
-| `apps/web` | React + Vite client; player views only |
-| `apps/api` | Fastify HTTP API, sessions, PostgreSQL transactions, deadline sweeper |
-| `packages/game` | Pure deterministic game rules and versioned content |
-| `db/migrations` | Ordered, transactional PostgreSQL migrations |
-| `tests` | Rules, real database concurrency/recovery, two-browser gameplay |
+| Path            | Responsibility                                                           |
+| --------------- | ------------------------------------------------------------------------ |
+| `apps/web`      | React + Vite client; player views only                                   |
+| `apps/api`      | Fastify HTTP API, sessions, PostgreSQL transactions, deadline sweeper    |
+| `packages/game` | Pure deterministic game rules and versioned content                      |
+| `db/migrations` | Ordered, transactional PostgreSQL migrations                             |
+| `tests`         | Rules, real database concurrency/recovery, two-browser gameplay          |
 | `reference/poc` | Frozen historical implementation, content, documents, and infrastructure |
 
 ## Verification

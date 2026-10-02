@@ -4,15 +4,15 @@ Archived from commit `a2ad812` on 2026-10-02. All tracked POC files are preserve
 
 ## Keep as evidence
 
-| Material | What it teaches us |
-| --- | --- |
-| `poc/ARCHITECTURE.md` | Original pitch: hero archetypes, simultaneous turns, three objectives, persistent faction identity |
-| `poc/README.md` | Balance experiments; removal needs a way to seize territory; seat-order bugs distort mirror win rates |
+| Material                                        | What it teaches us                                                                                                |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `poc/ARCHITECTURE.md`                           | Original pitch: hero archetypes, simultaneous turns, three objectives, persistent faction identity                |
+| `poc/README.md`                                 | Balance experiments; removal needs a way to seize territory; seat-order bugs distort mirror win rates             |
 | `poc/src/cards.ts`, `heroes.ts`, `territory.ts` | Six archetype sketches and content ideas, including Blight; candidates for redesign, not a balanced launch roster |
-| `poc/src/engine.ts`, `rng.ts`, `sim.ts` | Pure engine and reproducible simulation pattern; old numbers and resolution ordering are not binding |
-| `poc/server/CobaRoom.ts` | Private player views, invites, reconnect/rematch user journeys |
-| `poc/src/web` | Prior playtest UX and interaction lessons |
-| `poc/DEPLOY.md`, Fly configs, auth code | Historical environment/account integration reference; not new deployment configuration |
+| `poc/src/engine.ts`, `rng.ts`, `sim.ts`         | Pure engine and reproducible simulation pattern; old numbers and resolution ordering are not binding              |
+| `poc/server/CobaRoom.ts`                        | Private player views, invites, reconnect/rematch user journeys                                                    |
+| `poc/src/web`                                   | Prior playtest UX and interaction lessons                                                                         |
+| `poc/DEPLOY.md`, Fly configs, auth code         | Historical environment/account integration reference; not new deployment configuration                            |
 
 ## Changes made deliberately
 
