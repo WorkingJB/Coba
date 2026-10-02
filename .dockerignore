@@ -1,5 +1,11 @@
+.git
+.github
+reference
 node_modules
 dist
-.git
-*.log
-.DS_Store
+web-dist
+test-results
+playwright-report
+.env*
+tests
+docs
