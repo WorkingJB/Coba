@@ -60,6 +60,7 @@ function App() {
   const game = match?.game;
   const me = game?.players.find(p => p.id === match?.you);
   useEffect(() => {
+    if (!game) return;
     setCard(null); setAbility(false);
     if (pending.current && (pending.current.turn !== game?.turn || me?.locked || game?.status === 'finished')) {
       pending.current = null; localStorage.removeItem('coba.pending');

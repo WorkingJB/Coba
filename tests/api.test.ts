@@ -26,7 +26,7 @@ test('durable multiplayer contract against real PostgreSQL', async t => {
   const joined = await second.app.inject({ method: 'POST', url: '/api/join', headers: { origin, cookie: b.cookie }, payload: { code, hero: 'shade' } });
   assert.equal(joined.statusCode, 200);
   const action = { commandId: randomUUID(), turn: 1, action: { card: 'scout', zone: 0, ability: false } };
-  const send = (app: typeof first.app, cookie: string, payload: unknown) => app.inject({ method: 'POST', url: `/api/matches/${id}/actions`, headers: { origin, cookie }, payload });
+  const send = (app: typeof first.app, cookie: string, payload: Record<string, unknown>) => app.inject({ method: 'POST', url: `/api/matches/${id}/actions`, headers: { origin, cookie }, payload });
   await t.test('authorization, CSRF and runtime validation', async () => {
     assert.equal((await first.app.inject(`/api/matches/${id}`)).statusCode, 401);
     assert.equal((await first.app.inject({ url: `/api/matches/${id}`, headers: { cookie: outsider.cookie } })).statusCode, 404);
