@@ -470,11 +470,11 @@ function App() {
                   <div className="presence">
                     <span>
                       {own}
-                      <small>YOUR PRESENCE</small>
+                      <small>YOU</small>
                     </span>
                     <span>
                       {foe}
-                      <small>RIVAL PRESENCE</small>
+                      <small>RIVAL</small>
                     </span>
                   </div>
                   <span
@@ -530,7 +530,7 @@ function App() {
                     <small>
                       {game.turn < me.abilityReadyTurn
                         ? `Ready on turn ${me.abilityReadyTurn}`
-                        : "Free · targets your selected zone · 4-turn cooldown"}
+                        : `Add ${HEROES[me.hero].add} presence${HEROES[me.hero].damage ? `, remove ${HEROES[me.hero].damage} enemy` : ""}. Free · 4-turn cooldown`}
                     </small>
                   </span>
                 </label>
@@ -585,7 +585,7 @@ function App() {
                           {item.player === match.you ? "You" : "Rival"}
                         </strong>{" "}
                         {item.action.card
-                          ? `${CARDS[item.action.card].name} → ${ZONES[item.action.zone]}`
+                          ? `${CARDS[item.action.card].name} → ${"all" in CARDS[item.action.card] ? "all zones" : ZONES[item.action.zone]}`
                           : "Passed"}
                         {item.action.ability
                           ? ` + ${HEROES[item.hero].ability}`
