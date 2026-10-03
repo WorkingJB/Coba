@@ -1,36 +1,37 @@
 {
-  "name": "coba-engine",
-  "version": "0.0.1",
+  "name": "coba",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Coba — pure card-resolution engine (Build Sequence step 1, console only)",
-  "scripts": {
-    "dev": "vite",
-    "server": "tsx watch server/index.ts",
-    "build": "vite build",
-    "build:web": "vite build",
-    "start": "tsx server/index.ts",
-    "preview": "vite preview",
-    "sim": "tsx src/sim.ts",
-    "sim:bench": "tsx src/sim.ts --bench",
-    "migrate": "tsx server/migrate.ts",
-    "typecheck": "tsc --noEmit"
+  "engines": {
+    "node": ">=24 <25"
   },
-  "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^4.17.25",
-    "@types/node": "^22.19.21",
-    "@types/pg": "^8.20.0",
-    "tsx": "^4.19.2",
-    "typescript": "^5.6.3",
-    "vite": "^5.4.21"
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.server.json && vite build",
+    "test": "tsx --test tests/*.test.ts",
+    "test:browser": "playwright test",
+    "start": "node dist/apps/api/src/index.js",
+    "migrate": "node dist/apps/api/src/migrate.js"
   },
   "dependencies": {
-    "better-auth": "^1.6.19",
-    "colyseus": "^0.15.57",
-    "colyseus.js": "^0.15.28",
-    "cors": "^2.8.6",
-    "express": "^4.22.2",
-    "pg": "^8.22.0"
+    "@fastify/cookie": "11.1.2",
+    "@fastify/rate-limit": "11.2.0",
+    "@fastify/static": "10.1.5",
+    "fastify": "5.12.5",
+    "pg": "8.23.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.0.0",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tsx": "4.23.15",
+    "typescript": "7.0.2",
+    "vite": "8.3.2"
   }
 }
