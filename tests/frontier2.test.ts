@@ -19,6 +19,7 @@ import {
 } from "../packages/game/src/frontier2/content.js";
 import {
   greedy,
+  lockBots,
   reader,
   seededRand,
 } from "../packages/game/src/frontier2/bot.js";
@@ -401,4 +402,47 @@ test("bots finish legal matches in every seat count and conserve cards", () => {
         }
         assert.ok(game.history.length <= game.rules.maxTurns);
       }
+});
+
+test("bot seats plan from the state alone, and never keep an empty team alive", () => {
+  const table: Seat[] = [
+    { id: "a", team: 0, hero: "marshal" },
+    { id: "b", team: 1, hero: "corsair", bot: true },
+    { id: "c", team: 0, hero: "swarmwright", bot: true },
+    { id: "d", team: 1, hero: "signalist", bot: true },
+  ];
+  let game = lockBots(createGame(table, 21));
+  assert.deepEqual(Object.keys(game.pending).sort(), ["b", "c", "d"]);
+  // Same state, same plans: any replica or a journal replay agrees.
+  assert.deepEqual(lockBots(createGame(table, 21)), game);
+  assert.deepEqual(lockBots(game), game);
+  // The one person never acts. Their bot teammate keeps playing, but the
+  // team still forfeits after three missed turns.
+  for (let i = 0; i < 3; i++) {
+    assert.equal(game.status, "playing");
+    game = lockBots(resolveTurn(game, true));
+  }
+  assert.equal(game.reason, "abandonment");
+  assert.equal(game.winner, 1);
+  assert.equal(lockBots(game), game);
+});
+
+test("a locked plan is visible to its own team only", () => {
+  const table: Seat[] = [
+    ...seats,
+    { id: "c", team: 0, hero: "swarmwright" },
+    { id: "d", team: 1, hero: "signalist" },
+  ];
+  const plan: Action = { plays: [], ability: 1 };
+  const game = lockAction(createGame(table, 4), "a", plan);
+  const seen = (viewer: string) =>
+    playerView(game, viewer).players.find((p) => p.id === "a")!;
+  assert.deepEqual(seen("a").plan, plan);
+  assert.deepEqual(seen("c").plan, plan);
+  assert.equal(seen("c").hand, undefined);
+  for (const rival of ["b", "d"]) {
+    assert.equal(seen(rival).locked, true);
+    assert.equal(seen(rival).plan, undefined);
+    assert.equal(JSON.stringify(playerView(game, rival)).includes('"plan"'), false);
+  }
 });

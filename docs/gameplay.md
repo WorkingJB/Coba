@@ -18,9 +18,19 @@ Keep hero identity, hidden simultaneous planning, three positional objectives, s
 
 Fifteen points, sixteen turns, and the new card numbers are experimental, not inherited balance guarantees. Longest normal planning time is eight minutes; immediate locks shorten that. The history explains card/ability actions and zone point deltas. The UI shows numeric presence, control ownership, energy, cooldowns, and deadlines without relying solely on color.
 
-## In development: frontier-2 (rules engine only)
+## In development: frontier-2 (served by the API, no client yet)
 
-`packages/game/src/frontier2` holds the next ruleset. It is covered by rules tests and a CI balance bench, but **nothing serves it yet**: the API, database and client still run frontier-1. Wiring it in needs the ruleset dispatcher described in the architecture record.
+`packages/game/src/frontier2` holds the next ruleset. It is covered by rules tests, API tests and a CI balance bench. The API creates and runs frontier-2 matches, but **the web client cannot play them yet**: it still creates frontier-1 duels. The battle screen for frontier-2 is the next increment.
+
+What the API offers for frontier-2:
+
+- `POST /api/matches` takes `ruleset`, `size` (2 or 4 seats) and `bots`. With `bots: true` the other seats are filled by bots and the match starts at once, so one person can play alone.
+- `POST /api/join` takes an optional `team`. Without it the emptier team is chosen; a friend who wants to play beside the host asks for team 0.
+- `POST /api/matches/:id/start` lets the host start a part-filled lobby; bots take the empty seats.
+- An action is `{ plays: [{ card, zone }], ability: zone | null }`, at most three plays.
+- A locked plan is visible to the player's own team and hidden from the other team until the turn resolves. Hands stay private, including from teammates.
+- A team forfeits when every person on it misses three turns running. Bots never miss, and a bot teammate does not keep an absent player's team in the match.
+- Bots use the `reader` reference bot. They are opponents for testing, not a tuned difficulty.
 
 What changes, and why:
 

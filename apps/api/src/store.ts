@@ -1,30 +1,32 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import pg from "pg";
 import {
-  createGame,
-  lockAction,
-  playerView,
-  resolveTurn,
-  RuleError,
-  TURN_MS,
-  type Game,
-  type Team,
-  type Action,
-} from "../../../packages/game/src/engine.js";
-import type { Hero } from "../../../packages/game/src/content.js";
-export interface Seat {
-  id: string;
-  hero: Hero;
-  team: Team;
-}
+  isRuleError,
+  RULESETS,
+  type AnyGame,
+  type MatchView,
+  type Ruleset,
+  type RulesetId,
+  type SeatRow,
+} from "./rulesets.js";
+export type { MatchView } from "./rulesets.js";
 interface MatchRow {
   id: string;
   code: string;
   revision: number;
   status: "lobby" | "playing" | "finished";
-  seats: Seat[];
-  state: Game | null;
+  ruleset: RulesetId;
+  size: number;
+  seats: SeatRow[];
+  state: AnyGame | null;
   deadline: Date | null;
+}
+export interface CreateOptions {
+  ruleset: RulesetId;
+  /** Seats in the match: 2 for a duel, 4 for two teams of two. */
+  size: number;
+  /** Fill every other seat with bots and start at once. */
+  bots: boolean;
 }
 export class StoreError extends Error {
   constructor(
@@ -34,21 +36,30 @@ export class StoreError extends Error {
     super(message);
   }
 }
-function view(row: MatchRow, actor: string) {
-  if (!row.seats.some((p) => p.id === actor))
+function rules(row: Pick<MatchRow, "ruleset">): Ruleset {
+  const found = RULESETS[row.ruleset];
+  // A row written by a newer release than this replica: fail, do not guess.
+  if (!found) throw new Error(`Unknown ruleset ${row.ruleset}`);
+  return found;
+}
+function view(row: MatchRow, actor: string): MatchView {
+  // Only a person in a seat may read a match. Bot seats belong to nobody.
+  if (!row.seats.some((p) => p.id === actor && !p.bot))
     throw new StoreError(404, "Match not found.");
   return {
     id: row.id,
     code: row.code,
     revision: row.revision,
     status: row.status,
+    ruleset: row.ruleset,
+    size: row.size,
+    host: row.seats[0]!.id,
     seats: row.seats,
     deadline: row.deadline?.toISOString() ?? null,
     you: actor,
-    game: row.state ? playerView(row.state, actor) : null,
-  };
+    game: row.state ? rules(row).view(row.state, actor) : null,
+  } as MatchView;
 }
-export type MatchView = ReturnType<typeof view>;
 export class MatchStore {
   constructor(readonly pool: pg.Pool) {}
   private async transaction<T>(
@@ -118,15 +129,56 @@ export class MatchStore {
     )
       return;
     // Resume one turn, giving reconnecting players a full new planning window after an outage.
-    row.state = resolveTurn(row.state, true);
-    row.status = row.state.status;
-    row.deadline =
-      row.status === "playing" ? new Date(now.getTime() + TURN_MS) : null;
+    this.advance(row, now, true);
     await this.save(client, row, "turn.timeout", {
       turn: row.state.history.at(-1),
     });
   }
-  async create(id: string, actor: string, hero: Hero): Promise<MatchView> {
+  /** Resolve the turn, then plan the next one for any bot seats. */
+  private advance(row: MatchRow, now: Date, allowTimeout: boolean) {
+    const ruleset = rules(row);
+    row.state = ruleset.auto(ruleset.resolve(row.state!, allowTimeout));
+    row.status = row.state.status;
+    row.deadline =
+      row.status === "playing"
+        ? new Date(now.getTime() + ruleset.turnMs)
+        : null;
+  }
+  /** Deal the match. Seats left empty are taken by bots where the rules allow. */
+  private async begin(client: pg.PoolClient, row: MatchRow) {
+    const ruleset = rules(row);
+    for (const team of [0, 1] as const)
+      while (row.seats.filter((p) => p.team === team).length < row.size / 2)
+        row.seats.push({
+          id: randomUUID(),
+          hero: ruleset.heroes[randomBytes(1)[0]! % ruleset.heroes.length]!,
+          team,
+          bot: true,
+        });
+    row.state = ruleset.auto(
+      ruleset.create(row.seats, randomBytes(4).readUInt32BE()),
+    );
+    row.status = "playing";
+    row.deadline = new Date(
+      (await this.now(client)).getTime() + ruleset.turnMs,
+    );
+    await this.save(client, row, "match.started", {
+      initialState: row.state,
+    });
+  }
+  async create(
+    id: string,
+    actor: string,
+    hero: string,
+    options: CreateOptions = { ruleset: "frontier-1", size: 2, bots: false },
+  ): Promise<MatchView> {
+    const ruleset = rules(options);
+    if (
+      !ruleset.heroes.includes(hero) ||
+      !ruleset.sizes.includes(options.size) ||
+      (options.bots && !ruleset.bots)
+    )
+      throw new StoreError(400, "Invalid request.");
     return this.transaction(async (client) => {
       // Serialize creation per actor to cap abandoned invite rooms across replicas.
       await client.query("SELECT id FROM sessions WHERE id=$1 FOR UPDATE", [
@@ -148,19 +200,31 @@ export class MatchStore {
         throw new StoreError(429, "You already have five recent active rooms.");
       const row = (
         await client.query<MatchRow>(
-          "INSERT INTO matches(id,code,status,seats) VALUES ($1,$2,'lobby',$3) RETURNING *",
+          "INSERT INTO matches(id,code,status,seats,ruleset,size) VALUES ($1,$2,'lobby',$3,$4,$5) RETURNING *",
           [
             id,
             randomBytes(5).toString("hex").toUpperCase(),
             JSON.stringify([{ id: actor, hero, team: 0 }]),
+            options.ruleset,
+            options.size,
           ],
         )
       ).rows[0]!;
-      await this.save(client, row, "match.created", { hero });
+      await this.save(client, row, "match.created", { hero, ...options });
+      if (options.bots) await this.begin(client, row);
       return view(row, actor);
     });
   }
-  async join(code: string, actor: string, hero: Hero): Promise<MatchView> {
+  /**
+   * Take a seat by invite code. Without a team, the emptier one is chosen;
+   * a friend who wants to play alongside the host asks for the host's team.
+   */
+  async join(
+    code: string,
+    actor: string,
+    hero: string,
+    team?: 0 | 1,
+  ): Promise<MatchView> {
     return this.transaction(async (client) => {
       const row = (
         await client.query<MatchRow>(
@@ -170,15 +234,38 @@ export class MatchStore {
       ).rows[0];
       if (!row) throw new StoreError(404, "Room not found.");
       if (row.seats.some((p) => p.id === actor)) return view(row, actor);
-      if (row.status !== "lobby" || row.seats.length !== 1)
+      if (row.status !== "lobby" || row.seats.length >= row.size)
         throw new StoreError(409, "Room is full.");
-      row.seats.push({ id: actor, hero, team: 1 });
-      row.state = createGame(row.seats, randomBytes(4).readUInt32BE());
-      row.status = "playing";
-      row.deadline = new Date((await this.now(client)).getTime() + TURN_MS);
-      await this.save(client, row, "match.started", {
-        initialState: row.state,
-      });
+      if (!rules(row).heroes.includes(hero))
+        throw new StoreError(400, "Invalid request.");
+      const taken = (t: 0 | 1) => row.seats.filter((p) => p.team === t).length;
+      const side = team ?? (taken(1) < taken(0) ? 1 : 0);
+      if (taken(side) >= row.size / 2)
+        throw new StoreError(409, "That team is full.");
+      row.seats.push({ id: actor, hero, team: side });
+      if (row.seats.length === row.size) await this.begin(client, row);
+      else await this.save(client, row, "seat.joined", { actor, hero, team: side });
+      return view(row, actor);
+    });
+  }
+  /** The host starts a lobby early; bots take the seats still empty. */
+  async start(id: string, actor: string): Promise<MatchView> {
+    return this.transaction(async (client) => {
+      const row = (
+        await client.query<MatchRow>(
+          "SELECT * FROM matches WHERE id=$1 FOR UPDATE",
+          [id],
+        )
+      ).rows[0];
+      if (!row) throw new StoreError(404, "Match not found.");
+      view(row, actor);
+      // A repeated start is a retry of one that already committed.
+      if (row.status !== "lobby") return view(row, actor);
+      if (row.seats[0]!.id !== actor)
+        throw new StoreError(403, "Only the host can start the match.");
+      if (!rules(row).bots)
+        throw new StoreError(409, "This match needs every seat filled.");
+      await this.begin(client, row);
       return view(row, actor);
     });
   }
@@ -194,7 +281,7 @@ export class MatchStore {
     actor: string,
     commandId: string,
     turn: number,
-    action: Action,
+    input: unknown,
   ): Promise<MatchView> {
     // Commit expired turns even when rejecting the late command outside the transaction.
     const result = await this.transaction(async (client) => {
@@ -206,6 +293,11 @@ export class MatchStore {
       ).rows[0];
       if (!row) throw new StoreError(404, "Match not found.");
       view(row, actor);
+      const ruleset = rules(row);
+      // The action's shape depends on the match's ruleset, so it is checked here.
+      const parsed = ruleset.action.safeParse(input);
+      if (!parsed.success) throw new StoreError(400, "Invalid request.");
+      const action = parsed.data;
       const payload = { turn, action };
       const prior = (
         await client.query(
@@ -233,18 +325,14 @@ export class MatchStore {
           error: new StoreError(409, "Turn changed. Refresh and plan again."),
         };
       try {
-        row.state = lockAction(row.state, actor, action);
+        row.state = ruleset.lock(row.state, actor, action);
       } catch (error) {
-        if (error instanceof RuleError)
+        if (isRuleError(error))
           return { error: new StoreError(409, error.message) };
         throw error;
       }
-      if (row.state.players.every((p) => row.state!.pending[p.id])) {
-        row.state = resolveTurn(row.state);
-        row.status = row.state.status;
-        row.deadline =
-          row.status === "playing" ? new Date(now.getTime() + TURN_MS) : null;
-      }
+      if (row.state.players.every((p: { id: string }) => row.state!.pending[p.id]))
+        this.advance(row, now, false);
       await this.save(client, row, "action.accepted", {
         actor,
         commandId,

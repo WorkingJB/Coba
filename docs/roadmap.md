@@ -29,7 +29,7 @@ Payments, gacha, trading, player-generated competitive cards, chat, live AI oppo
 Decided 2026-11-26: keep this foundation and port the POC's game back onto it; build the visual slice for 2v2; art direction is an illustrated battlefield with a hard-science-fiction look.
 
 1. **Done on `feat/frontier-2-core`** — frontier-2 rules, six commanders, reference bots, CI bench (engine only).
-2. Ruleset dispatcher, four-seat lobbies with bot-filled seats, frontier-2 commands and views through the API.
+2. **Done on `feat/frontier-2-api`** — ruleset dispatcher, four-seat lobbies with bot-filled seats, frontier-2 commands and views through the API. The web client still plays frontier-1 only.
 3. Battle screen rebuilt as a fixed-viewport game board: drag cards to zones, staged resolution from the event list, sound. No new art required.
 4. Art slice: one theater, two commanders and their cards fully illustrated, to settle the look before producing the rest.
 
