@@ -2,7 +2,7 @@
 
 ## Current release boundary
 
-This branch does not deploy infrastructure or touch existing Fly apps, domains, auth data, or production databases. It provides a portable image and automated cloud tests. Old Fly files are reference only. Use a new database and hostname for the rebuild; `sessions` and other tables are intentionally a fresh schema.
+Private staging runs on Fly.io in the `coba-509` org: app `coba-509` at https://play.coba.games (`fly.toml`, two machines in `iad`; `APP_ORIGIN` must match that host exactly) and Managed Postgres 17 cluster `coba-509-db` (Basic plan, direct endpoint, no HA). `fly deploy` runs migrations as the release command. `DATABASE_URL` and `PLAYTEST_ACCESS_KEY` are Fly secrets. The old `coba-246`/`coba-test` apps and their domains are untouched; old Fly files in `reference/poc` are reference only. Use a new database and hostname for the rebuild; `sessions` and other tables are intentionally a fresh schema.
 
 ## CI
 
@@ -12,7 +12,7 @@ GitHub Actions provisions disposable PostgreSQL 18, uses Node 24, installs pinne
 
 1. Choose the provider/cost envelope and a new app/database. Use managed HA PostgreSQL; configure TLS, private networking, credentials with least privilege, backups, and recovery access.
 2. Build a release image from a passing commit and record its immutable digest. Run `npm run migrate` once as a release job with a migration role. The runner uses an advisory transaction lock; successful migrations are recorded. Do not use the runtime role for schema management in production.
-3. Start at least two containers behind a health-checking load balancer, with distinct failure placement. Set `DATABASE_URL`, exact external `APP_ORIGIN` (scheme + host, no trailing slash), a random `PLAYTEST_ACCESS_KEY` ≥16 characters, `NODE_ENV=production`, and `PORT=8080`. Supply secrets from the host's secret manager.
+3. Start at least two containers behind a health-checking load balancer, with distinct failure placement. Set `DATABASE_URL`, exact external `APP_ORIGIN` (scheme + host, no trailing slash), a `PLAYTEST_ACCESS_KEY` of at least 6 characters (staging uses a short shared word; it only gates who can join), `NODE_ENV=production`, and `PORT=8080`. Supply secrets from the host's secret manager.
 4. Route web and `/api` to the same origin. Terminate HTTPS; secure session cookies require HTTPS. The application requires an exact Origin header for all POSTs. Non-browser test clients must send it too. Do not use wildcard CORS.
 5. Use `/health/live` for process health and `/health/ready` for database/schema reachability. Configure deregistration/draining before SIGTERM. Keep termination grace longer than request/database timeout budgets.
 6. Smoke test two profiles/devices, lock a move, restart its serving replica, reload, and complete the turn through another replica. Test two replicas accepting simultaneous locks and two workers claiming deadlines.

@@ -1,0 +1,38 @@
+# Coba private staging on Fly.io (org coba-509). See docs/operations.md.
+# Secrets (set with `fly secrets set`, never committed): DATABASE_URL, PLAYTEST_ACCESS_KEY.
+app = "coba-509"
+primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
+
+[build]
+
+[deploy]
+  # One migration run per release, before any new machine takes traffic.
+  release_command = "node dist/apps/api/src/migrate.js"
+  strategy = "rolling"
+
+[env]
+  NODE_ENV = "production"
+  PORT = "8080"
+  APP_ORIGIN = "https://play.coba.games"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # All state lives in Postgres; machines are interchangeable. Keep two warm so
+  # the in-process deadline sweeper always runs and deploys don't drop players.
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 2
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "15s"
+    timeout = "3s"
+    method = "GET"
+    path = "/health/ready"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

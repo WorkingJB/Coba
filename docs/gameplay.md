@@ -18,9 +18,18 @@ Keep hero identity, hidden simultaneous planning, three positional objectives, s
 
 Fifteen points, sixteen turns, and the new card numbers are experimental, not inherited balance guarantees. Longest normal planning time is eight minutes; immediate locks shorten that. The history explains card/ability actions and zone point deltas. The UI shows numeric presence, control ownership, energy, cooldowns, and deadlines without relying solely on color.
 
-## In development: frontier-2 (served by the API, no client yet)
+## In development: frontier-2 (playable in the web client)
 
-`packages/game/src/frontier2` holds the next ruleset. It is covered by rules tests, API tests and a CI balance bench. The API creates and runs frontier-2 matches, but **the web client cannot play them yet**: it still creates frontier-1 duels. The battle screen for frontier-2 is the next increment.
+`packages/game/src/frontier2` holds the next ruleset. It is covered by rules tests, API tests, browser tests and a CI balance bench. The web client now creates and plays frontier-2 only; the API still serves frontier-1 for any match created under it, but no screen plays one. The sections above describe frontier-1 and are kept as the record of the released ruleset.
+
+The battle screen:
+
+- **One fixed viewport.** The front (three stations) is in the middle, both fleets flank it, and the player's console (energy, ability, hand, lock) runs along the bottom. Nothing scrolls on desktop or phone; only the hand scrolls sideways on a phone.
+- **Planning.** Drag a card or the ability onto a station, or pick it and then pick a station. Staged cards show as chips in the station with a projected total, and can be removed until the plan is locked. A teammate's locked plan appears in the same place.
+- **Playback.** When a turn resolves, the client replays it from the engine's event list in phases (plans revealed, deployment, logistics, strikes, control, securing), moving the numbers as it goes. It can be skipped, and is skipped entirely under the reduced-motion setting. A turn that resolved while the page was closed is shown as finished, not replayed.
+- **Sound** is synthesized in the browser (no audio files) and can be muted.
+- **No art yet.** Stations are wireframe schematics and commanders are two-letter marks. These are placeholders for the art slice.
+- From the bridge a player can start a solo 2v2 or duel against bots, host a lobby, or join one by code and side.
 
 What the API offers for frontier-2:
 

@@ -2,7 +2,7 @@
 
 A fresh implementation of Coba: a simultaneous-turn tactical card battler over three control zones, designed to grow into a cooperative faction war. The previous project is preserved in [`reference/poc/`](reference/poc/README.md); none of its code is imported by the new application.
 
-**Status: private-alpha foundation, not production-ready.** Includes a playable two-human 1v1 client, two heroes, a deterministic engine, durable matches, private invite rooms, recoverable sessions, timed turns, command deduplication, and automated cloud verification. Account registration, matchmaking, 2v2 matchmaking/UI, faction progression, and production infrastructure are future milestones.
+**Status: private-alpha foundation, not production-ready.** Includes a playable web client for the in-development frontier-2 rules (solo or with friends, duel or 2v2, bots filling empty seats, six commanders), a deterministic engine, durable matches, private invite rooms, recoverable sessions, timed turns, command deduplication, and automated cloud verification. Account registration, matchmaking, 2v2 matchmaking/UI, faction progression, and production infrastructure are future milestones.
 
 ## Start here
 
@@ -19,7 +19,7 @@ A fresh implementation of Coba: a simultaneous-turn tactical card battler over t
 | `apps/web`      | React + Vite client; player views only                                   |
 | `apps/api`      | Fastify HTTP API, sessions, PostgreSQL transactions, deadline sweeper    |
 | `packages/game` | Pure deterministic game rules and versioned content                      |
-| `packages/game/src/frontier2` | Next ruleset (2v2-ready, six commanders, bots, bench); served by the API, no client yet |
+| `packages/game/src/frontier2` | Next ruleset (2v2-ready, six commanders, bots, bench); served by the API and played by the web client |
 | `db/migrations` | Ordered, transactional PostgreSQL migrations                             |
 | `tests`         | Rules, real database concurrency/recovery, two-browser gameplay          |
 | `reference/poc` | Frozen historical implementation, content, documents, and infrastructure |
