@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.server.json && vite build",
     "test": "tsx --test tests/*.test.ts",
     "test:browser": "playwright test",
+    "bench": "tsx packages/game/src/frontier2/bench.ts",
     "start": "node dist/apps/api/src/index.js",
     "migrate": "node dist/apps/api/src/migrate.js"
   },

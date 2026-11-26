@@ -31,6 +31,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - name: Balance bench (frontier-2)
+        run: npm run bench
       - run: npm run build
       - run: npm run migrate
       - run: npx playwright install --with-deps chromium
