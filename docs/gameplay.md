@@ -18,6 +18,28 @@ Keep hero identity, hidden simultaneous planning, three positional objectives, s
 
 Fifteen points, sixteen turns, and the new card numbers are experimental, not inherited balance guarantees. Longest normal planning time is eight minutes; immediate locks shorten that. The history explains card/ability actions and zone point deltas. The UI shows numeric presence, control ownership, energy, cooldowns, and deadlines without relying solely on color.
 
+## In development: frontier-2 (rules engine only)
+
+`packages/game/src/frontier2` holds the next ruleset. It is covered by rules tests and a CI balance bench, but **nothing serves it yet**: the API, database and client still run frontier-1. Wiring it in needs the ruleset dispatcher described in the architecture record.
+
+What changes, and why:
+
+- **Spend energy across several cards.** Energy still equals the turn number (cap 6), but a plan may commit up to three cards, each to its own zone, plus the ability aimed separately. Draw two per turn to a hand cap of six. In frontier-1 the cap outgrew every card, so cost stopped mattering by turn four.
+- **Reads inside the turn.** _Shield_ blocks removal in a zone this turn. _Ambush_ removes more where the enemy deployed a unit this turn. Deploying beats a shield, a strike beats a deployment, a shield beats a strike.
+- **Securing.** Lead a zone three turns running and it is secured: two bonus points, then the zone clears for both teams. Surplus presence is lost, so winning by exactly enough matters.
+- **Bounded boosts.** Amplify scales only what a team deploys in that zone that turn. Because presence is shared, a teammate's units are boosted too, which is the first real 2v2 combination.
+- **Six commanders and four theaters**, re-themed for a hard-science-fiction setting and expressed entirely as data. Names are placeholders.
+- **An event list per turn** (deploy, amplify, strike, control, secure) so a client can animate a resolution instead of diffing two snapshots.
+- First to 16, twelve turns at most, 45-second planning window.
+
+What the bench has and has not shown (bots, so direction only):
+
+- Seat order is fair: team 0 wins about half of decisive games.
+- Matches run about ten turns and nearly all end on the score target.
+- **Bot win rate badly overstates imbalance.** Bots are so consistent that a one-point average edge in a 16-point game shows up as a 95% win rate. The bench therefore reports average score margin and treats win rate as a footnote. The POC's 90% matchups deserve the same caution.
+- Carry-over is not what makes matchups lopsided. Halving presence every turn halved blowouts but also cut comebacks and lead changes by about a quarter, so presence stays permanent for now. A rotating bonus zone shortened games and also reduced comebacks, so it stays off. Both remain as rule switches.
+- The roster is **not balanced yet**. The margin gate (five points) is report-only in CI; see the latest bench log for the current table. Commander numbers should next move on human play, not on more bot passes.
+
 ## Repeated loop
 
 | Horizon     | Player action                                    | Payoff                              | State of implementation                         |

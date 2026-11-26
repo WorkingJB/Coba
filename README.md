@@ -19,6 +19,7 @@ A fresh implementation of Coba: a simultaneous-turn tactical card battler over t
 | `apps/web`      | React + Vite client; player views only                                   |
 | `apps/api`      | Fastify HTTP API, sessions, PostgreSQL transactions, deadline sweeper    |
 | `packages/game` | Pure deterministic game rules and versioned content                      |
+| `packages/game/src/frontier2` | Next ruleset (2v2-ready, six commanders, bots, bench); not yet served |
 | `db/migrations` | Ordered, transactional PostgreSQL migrations                             |
 | `tests`         | Rules, real database concurrency/recovery, two-browser gameplay          |
 | `reference/poc` | Frozen historical implementation, content, documents, and infrastructure |
