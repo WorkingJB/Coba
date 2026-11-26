@@ -5,10 +5,10 @@ if (
   !DATABASE_URL ||
   !APP_ORIGIN ||
   !PLAYTEST_ACCESS_KEY ||
-  PLAYTEST_ACCESS_KEY.length < 16
+  PLAYTEST_ACCESS_KEY.length < 6
 )
   throw new Error(
-    "DATABASE_URL, APP_ORIGIN and a PLAYTEST_ACCESS_KEY of at least 16 characters are required.",
+    "DATABASE_URL, APP_ORIGIN and a PLAYTEST_ACCESS_KEY of at least 6 characters are required.",
   );
 const pool = new pg.Pool({
   connectionString: DATABASE_URL,
