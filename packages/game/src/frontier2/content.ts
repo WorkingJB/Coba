@@ -369,7 +369,7 @@ export function describe(effect: Effect): string {
     parts.push(`Remove ${pct(effect.damageFrac)} of enemy presence${where}.`);
   if (effect.ambush)
     parts.push(
-      `Ambush: remove ${effect.ambush} more where the enemy deployed a unit this turn.`,
+      `Ambush: ${effect.ambush} more if the enemy deploys a unit there.`,
     );
   if (effect.add) parts.push(`Establish ${effect.add} presence${where}.`);
   if (effect.amplify)
