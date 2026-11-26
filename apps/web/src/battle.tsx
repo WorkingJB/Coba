@@ -558,7 +558,13 @@ export function Battle(props: {
     <main className={`battle ${frame ? "resolving" : ""}`} data-phase={frame?.kind ?? "plan"}>
       <header className="hud">
         <div className="hud-turn">
-          <small>{THEATER[game.theater].name}</small>
+          {frame ? (
+            <small className="phase" role="status">
+              {frame.label}
+            </small>
+          ) : (
+            <small>{THEATER[game.theater].name}</small>
+          )}
           <h1>
             Turn {shownTurn} <span>of {game.rules.maxTurns}</span>
           </h1>
@@ -695,14 +701,6 @@ export function Battle(props: {
             </div>
           );
         })}
-        {frame && (
-          <div className="phase" role="status">
-            <span>{frame.label}</span>
-            <button className="tool" onClick={playback.skip}>
-              Skip
-            </button>
-          </div>
-        )}
       </section>
 
       {roster(foe)}
@@ -767,6 +765,11 @@ export function Battle(props: {
           <p className="status" role="status">
             {status}
           </p>
+          {frame ? (
+            <button className="secondary lock" onClick={playback.skip}>
+              Skip playback
+            </button>
+          ) : (
           <button
             className="primary lock"
             disabled={!planning}
@@ -785,6 +788,7 @@ export function Battle(props: {
                     ? "Lock plan"
                     : "Pass turn"}
           </button>
+          )}
           <small className="connection">{props.connection}</small>
         </div>
       </footer>

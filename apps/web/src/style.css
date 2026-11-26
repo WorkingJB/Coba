@@ -510,9 +510,11 @@ select {
   inset: 0;
   display: grid;
   place-items: center;
+  z-index: 1;
   font: 9px var(--mono);
   letter-spacing: 0.16em;
   color: var(--text);
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
 }
 .hud-tools {
   display: flex;
@@ -770,6 +772,7 @@ select {
 .chip.mine {
   padding: 3px 8px;
   border-style: dashed;
+  color: #c9f4fb;
   background: var(--ally-dim);
 }
 .chip.mine:hover {
@@ -805,25 +808,14 @@ select {
 .battle[data-phase="strike"] .zone {
   animation: jolt 0.35s linear;
 }
-.phase {
-  position: absolute;
-  left: 50%;
-  bottom: 4px;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 5px 8px 5px 16px;
+.hud-turn .phase {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-bottom: 2px;
   background: var(--warn);
   color: #1a1200;
-  font: 700 15px var(--display);
+  font-weight: 700;
   letter-spacing: 0.2em;
-  text-transform: uppercase;
-  z-index: 3;
-}
-.phase .tool {
-  color: #1a1200;
-  border-color: #1a1200;
 }
 
 .console {
@@ -916,8 +908,8 @@ select {
 }
 .card {
   position: relative;
-  flex: 0 0 132px;
-  height: 164px;
+  flex: 0 0 136px;
+  height: 178px;
   display: flex;
   flex-direction: column;
   gap: 3px;
@@ -1113,7 +1105,7 @@ select {
 }
 
 /* Short desktop windows: tighten the console so the front keeps its room. */
-@media (max-height: 760px) and (min-width: 861px) {
+@media (max-height: 640px) and (min-width: 861px) {
   .card {
     height: 142px;
     flex-basis: 124px;
@@ -1137,7 +1129,7 @@ select {
     gap: 6px 10px;
     padding: 6px 8px;
   }
-  .hud-turn small {
+  .hud-turn small:not(.phase) {
     display: none;
   }
   .hud-turn h1 {
@@ -1178,10 +1170,14 @@ select {
     height: 24px;
     font-size: 9px;
   }
+  .pilot {
+    min-width: 0;
+    gap: 5px;
+  }
   .lock-state {
     grid-column: auto;
     font-size: 9px;
-    letter-spacing: 0.08em;
+    letter-spacing: 0;
   }
   .log {
     display: none;
@@ -1212,7 +1208,19 @@ select {
     clip-path: none;
   }
   .schematic {
-    display: none;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    flex: none;
+    width: auto;
+    height: 62%;
+    transform: translateY(-50%);
+    opacity: 0.55;
+    pointer-events: none;
+  }
+  .presence,
+  .chips {
+    position: relative;
   }
   .zone-head strong {
     font-size: 15px;
@@ -1258,8 +1266,8 @@ select {
     justify-content: flex-start;
   }
   .card {
-    flex-basis: 108px;
-    height: 122px;
+    flex-basis: 118px;
+    height: 158px;
     padding: 8px 8px 6px;
   }
   .card strong {
