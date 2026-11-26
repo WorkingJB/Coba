@@ -155,20 +155,20 @@ test("a shield blocks removal, and only this turn", () => {
     g.players[0]!.hand = ["pdgrid"];
     g.players[1]!.hand = ["torpedo"];
   });
-  // Torpedo Run removes 5; Point-Defense Grid adds 2 and blocks 6.
+  // Torpedo Run removes 4; Point-Defense Grid adds 4 and blocks 6.
   const shielded = both(
     game,
     { plays: [{ card: "pdgrid", zone: 1 }], ability: null },
     { plays: [{ card: "torpedo", zone: 1 }], ability: null },
   );
-  assert.deepEqual(shielded.board[1], [7, 2]);
+  assert.deepEqual(shielded.board[1], [9, 2]);
   const strike = shielded.history[0]!.events.find((e) => e.kind === "strike");
   assert.deepEqual(strike, {
     kind: "strike",
     zone: 1,
     team: 0,
     amount: 0,
-    blocked: 5,
+    blocked: 4,
     ambush: false,
   });
   // The same strike into an unshielded zone lands in full.
@@ -176,7 +176,7 @@ test("a shield blocks removal, and only this turn", () => {
     plays: [{ card: "torpedo", zone: 1 }],
     ability: null,
   });
-  assert.deepEqual(open.board[1], [0, 2]);
+  assert.deepEqual(open.board[1], [1, 2]);
 });
 
 test("ambush only springs where the enemy deployed a unit", () => {
@@ -186,7 +186,7 @@ test("ambush only springs where the enemy deployed a unit", () => {
     g.players[0]!.hand = ["gunship"];
     g.players[1]!.hand = ["boarding", "boarding"];
   });
-  // Boarding Action removes 3, or 5 where a unit just arrived, and seizes 1.
+  // Boarding Action removes 2, or 4 where a unit just arrived, and seizes 1.
   const next = both(
     game,
     { plays: [{ card: "gunship", zone: 0 }], ability: null },
@@ -198,11 +198,11 @@ test("ambush only springs where the enemy deployed a unit", () => {
       ability: null,
     },
   );
-  assert.deepEqual(next.board[0], [5, 1]); // 6 + 4 - (3 + 2)
-  assert.deepEqual(next.board[2], [3, 1]); // 6 - 3
+  assert.deepEqual(next.board[0], [6, 1]); // 6 + 4 - (2 + 2)
+  assert.deepEqual(next.board[2], [4, 1]); // 6 - 2
 });
 
-test("amplify and percentage strikes measure the zone after deployments", () => {
+test("amplify scales this turn's deployments; percentage strikes measure the result", () => {
   const amplified = createGame(
     [
       { id: "a", team: 0, hero: "quartermaster" },
@@ -214,7 +214,8 @@ test("amplify and percentage strikes measure the zone after deployments", () => 
   amplified.board[1] = [5, 0];
   amplified.players[0]!.hand = ["gunship", "resupply"];
   amplified.players[1]!.hand = ["spoof"];
-  // 5 + 4 + 2 = 11, plus floor(11 * 0.4) = 15. Spoof strips floor(15 * 0.4) = 6.
+  // Deploys 4 + 2 = 6, arriving 50% stronger (+3): 5 + 9 = 14.
+  // Spoof strips floor(14 * 0.3) = 4 and seizes 1.
   const next = both(
     amplified,
     {
@@ -226,7 +227,7 @@ test("amplify and percentage strikes measure the zone after deployments", () => 
     },
     { plays: [{ card: "spoof", zone: 1 }], ability: null },
   );
-  assert.deepEqual(next.board[1], [9, 1]);
+  assert.deepEqual(next.board[1], [10, 1]);
 });
 
 test("resolution does not depend on player order", () => {
@@ -247,8 +248,8 @@ test("resolution does not depend on player order", () => {
   const reversed = structuredClone(locked);
   reversed.players.reverse();
   assert.deepEqual(resolveTurn(locked).board, resolveTurn(reversed).board);
-  // Each side removes 5 of the other's 4 + 2.
-  assert.deepEqual(resolveTurn(locked).board[0], [1, 1]);
+  // Each side removes 4 of the other's 4 + 2.
+  assert.deepEqual(resolveTurn(locked).board[0], [2, 2]);
 });
 
 test("holding a zone three turns secures it: bonus, then the zone reopens", () => {
@@ -273,7 +274,7 @@ test("losing the lead restarts the hold streak for the new leader", () => {
   });
   game = both(game, pass, pass);
   assert.equal(game.holds[1]!.streak, 1);
-  // Sabotage removes 2 and seizes 1, Marines add 2: 1 against 3.
+  // Sabotage removes 1 and seizes 1, Marines add 2: 2 against 3.
   game = both(game, pass, {
     plays: [
       { card: "sabotage", zone: 1 },
@@ -281,7 +282,7 @@ test("losing the lead restarts the hold streak for the new leader", () => {
     ],
     ability: null,
   });
-  assert.deepEqual(game.board[1], [1, 3]);
+  assert.deepEqual(game.board[1], [2, 3]);
   assert.deepEqual(game.holds[1], { team: 1, streak: 1 });
 });
 

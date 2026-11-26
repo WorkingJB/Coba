@@ -17,7 +17,7 @@ import {
   type Seat,
   type Team,
 } from "./engine.js";
-import { greedy, reader, seededRand, type Bot } from "./bot.js";
+import { reader, seededRand, type Bot } from "./bot.js";
 
 // Hard limits fail the build. Targets are what tuning is aiming for.
 const GATE = { matchup: [30, 70], seat: [45, 55] } as const;
@@ -32,6 +32,7 @@ interface Result {
   /** The winner trailed on points after turn 4. */
   comeback: boolean;
   leadChanges: number;
+  onPoints: boolean;
 }
 interface Setup {
   teams: [Hero[], Hero[]];
@@ -73,6 +74,7 @@ function play(setup: Setup): Result {
     comeback:
       winner !== "draw" && atTurnFour !== 0 && (atTurnFour > 0 ? 0 : 1) !== winner,
     leadChanges,
+    onPoints: game.reason === "points",
   };
 }
 
@@ -86,6 +88,7 @@ interface Tally {
   comebacks: number;
   leadChanges: number;
   blowouts: number;
+  onPoints: number;
 }
 const emptyTally = (): Tally => ({
   games: 0,
@@ -97,6 +100,7 @@ const emptyTally = (): Tally => ({
   comebacks: 0,
   leadChanges: 0,
   blowouts: 0,
+  onPoints: 0,
 });
 function merge(into: Tally, from: Tally): void {
   for (const key of Object.keys(into) as (keyof Tally)[]) into[key] += from[key];
@@ -122,6 +126,7 @@ function series(
     tally.leadChanges += result.leadChanges;
     if (result.margin >= 8) tally.blowouts++;
     if (result.comeback) tally.comebacks++;
+    if (result.onPoints) tally.onPoints++;
     if (result.winner === "draw") {
       tally.draws++;
       continue;
@@ -177,7 +182,8 @@ for (const [h, s] of byHero) console.log(`${name(h).padEnd(16)} ${pct(s.wins / s
 const seatShare = (overall.seatZero / Math.max(1, overall.decisive)) * 100;
 console.log(
   `\nSeat check: team 0 won ${seatShare.toFixed(1)}% of decisive games. ` +
-    `Avg ${(overall.turns / overall.games).toFixed(1)} turns, ` +
+    `Avg ${(overall.turns / overall.games).toFixed(1)} turns ` +
+    `(${((overall.onPoints / overall.games) * 100).toFixed(0)}% reach the target score), ` +
     `comebacks ${((overall.comebacks / overall.games) * 100).toFixed(1)}%, ` +
     `blowouts ${((overall.blowouts / overall.games) * 100).toFixed(1)}%, ` +
     `${outsideTarget}/${pairs.length} matchups outside ${TARGET.matchup.join("–")}.`,
@@ -186,7 +192,7 @@ if (seatShare < GATE.seat[0] || seatShare > GATE.seat[1])
   failures.push(`Seat bias: team 0 wins ${seatShare.toFixed(1)}%`);
 
 // 2. Which scoring rule actually loosens the snowball? Same games, four rule sets.
-console.log("\n== Scoring rule comparison · greedy bots, all pairings ==");
+console.log("\n== Scoring rule comparison · reader bots, all pairings ==");
 const variants: [string, Partial<Rules>][] = [
   ["neither", { secureAfter: 0, focusBonus: 0 }],
   ["secure zones", { secureAfter: 3, focusBonus: 0 }],
@@ -199,7 +205,7 @@ for (const [label, rules] of variants) {
   let worst = 0;
   pairs.forEach(([a, b], index) => {
     const tally = series([a], [b], games(40), 50_000 + index * 1000, {
-      bot: greedy,
+      bot: reader,
       rules,
     });
     merge(total, tally);
@@ -217,14 +223,14 @@ for (const [label, rules] of variants) {
 }
 
 // 3. Theaters should bend matchups, not decide them.
-console.log("\n== Theaters · greedy bots · most lopsided pairing ==");
+console.log("\n== Theaters · reader bots · most lopsided pairing ==");
 for (const theater of THEATER_IDS) {
   let worst = { label: "", share: 50 };
   let spread = 0;
   pairs.forEach(([a, b], index) => {
     const share = rate(
       series([a], [b], games(40), 90_000 + index * 1000, {
-        bot: greedy,
+        bot: reader,
         theater,
       }),
     );

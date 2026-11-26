@@ -107,7 +107,8 @@ function options(
     if (!grown.length) break;
     grown.sort((x, y) => y.value - x.value);
     frontier = grown.slice(0, BEAM);
-    found.push(...frontier);
+    // Remember more than the beam carries forward, so callers can pick variety.
+    found.push(...grown.slice(0, Math.max(BEAM, keep)));
   }
   found.sort((x, y) => y.value - x.value);
   const ready = game.turn >= me.abilityReadyTurn;
@@ -138,8 +139,8 @@ function seat(game: Game, playerId: string): Player {
 export const greedy: Bot = (game, playerId) =>
   options(game, seat(game, playerId), {}, 1)[0]!.action;
 
-const SCENARIOS = 3;
 const SHORTLIST = 6;
+const ROUNDS = 120;
 
 /** A hand the player could plausibly hold: drawn from the cards not yet played. */
 function plausibleHand(player: Player, rand: Rand): CardId[] {
@@ -151,32 +152,87 @@ function plausibleHand(player: Player, rand: Rand): CardId[] {
   return unseen.slice(0, player.hand.length);
 }
 
+/** Keep the best plan for each distinct way of spreading cards over zones. */
+function varied(found: Option[], keep: number): Option[] {
+  const seen = new Set<string>();
+  const result: Option[] = [];
+  for (const option of found) {
+    const shape =
+      option.action.plays
+        .map((p) => p.zone)
+        .sort()
+        .join("") + `|${option.action.ability ?? "-"}`;
+    if (seen.has(shape)) continue;
+    seen.add(shape);
+    result.push(option);
+    if (result.length === keep) break;
+  }
+  return result;
+}
+
+const spent = (action: Action) =>
+  action.plays.reduce((sum, play) => sum + card(play.card).cost, 0);
+
+/**
+ * Treats the turn as what it is: a simultaneous game against one rival.
+ * Builds the payoff table for a shortlist of plans on each side, finds a mixed
+ * strategy by fictitious play, and samples from it. It is unpredictable on
+ * purpose, because a predictable plan is the one that gets ambushed.
+ */
 export const reader: Bot = (game, playerId, rand) => {
   const me = seat(game, playerId);
-  const shortlist = options(game, me, {}, SHORTLIST);
-  if (shortlist.length < 2) return shortlist[0]!.action;
-  const totals = shortlist.map(() => 0);
-  for (let n = 0; n < SCENARIOS; n++) {
-    const others: Record<string, Action | undefined> = {};
-    for (const other of game.players) {
-      if (other.id === playerId) continue;
-      const imagined: Player = { ...other, hand: plausibleHand(other, rand) };
-      others[other.id] = options(game, imagined, {}, 1)[0]!.action;
-    }
-    shortlist.forEach((option, index) => {
-      const cost = option.action.plays.reduce(
-        (sum, play) => sum + card(play.card).cost,
-        0,
+  const mine = varied(options(game, me, {}, 24), SHORTLIST);
+  if (mine.length < 2) return mine[0]!.action;
+  // Everyone else is imagined with a plausible hand. One enemy is the rival
+  // whose choice we reason about; the rest are assumed to play their best plan.
+  const enemies = game.players.filter((p) => p.team !== me.team);
+  const rival = enemies[Math.floor(rand() * enemies.length)]!;
+  const fixed: Record<string, Action | undefined> = {};
+  let theirs: Option[] = [];
+  for (const other of game.players) {
+    if (other.id === playerId) continue;
+    const imagined: Player = { ...other, hand: plausibleHand(other, rand) };
+    if (other.id === rival.id)
+      theirs = varied(options(game, imagined, {}, 24), SHORTLIST);
+    else fixed[other.id] = options(game, imagined, {}, 1)[0]!.action;
+  }
+  const payoff = mine.map((a) =>
+    theirs.map((b) => {
+      fixed[playerId] = a.action;
+      fixed[rival.id] = b.action;
+      return (
+        evaluate(me.team, simulate(game, fixed)) - spent(a.action) + spent(b.action)
       );
-      totals[index]! +=
-        evaluate(
-          me.team,
-          simulate(game, { ...others, [playerId]: option.action }),
-        ) - cost;
+    }),
+  );
+  const myPlays = mine.map(() => 0);
+  const theirPlays = theirs.map(() => 0);
+  let i = 0;
+  let j = 0;
+  for (let round = 0; round < ROUNDS; round++) {
+    myPlays[i]!++;
+    theirPlays[j]!++;
+    let bestMine = -Infinity;
+    payoff.forEach((row, a) => {
+      const value = row.reduce((sum, v, b) => sum + v * theirPlays[b]!, 0);
+      if (value > bestMine) {
+        bestMine = value;
+        i = a;
+      }
+    });
+    let bestTheirs = Infinity;
+    theirs.forEach((_, b) => {
+      const value = payoff.reduce((sum, row, a) => sum + row[b]! * myPlays[a]!, 0);
+      if (value < bestTheirs) {
+        bestTheirs = value;
+        j = b;
+      }
     });
   }
-  let best = 0;
-  for (let i = 1; i < totals.length; i++)
-    if (totals[i]! > totals[best]!) best = i;
-  return shortlist[best]!.action;
+  let pick = rand() * ROUNDS;
+  for (let a = 0; a < mine.length; a++) {
+    pick -= myPlays[a]!;
+    if (pick < 0) return mine[a]!.action;
+  }
+  return mine[0]!.action;
 };

@@ -2,7 +2,7 @@
 // four seats on one shared front. A turn resolves every player's plan at once,
 // in fixed phases, so neither seat order nor team order can matter:
 //   1. deploy   — all presence lands
-//   2. amplify  — each team scales what it now has
+//   2. amplify  — each team's deployments this turn are scaled
 //   3. strike   — removal (less shields) is measured against that total
 //   4. control  — zone leads score, streaks advance, held zones are secured
 import {
@@ -345,7 +345,9 @@ export function simulate(
         events.push({ kind: "deploy", zone, team, amount: add[i]! });
     }
     for (const team of TEAMS) {
-      const boost = Math.floor(massed[team] * amp[zone * 2 + team]!);
+      // Only this turn's deployments scale, so a boost can never compound.
+      const i = zone * 2 + team;
+      const boost = Math.floor(add[i]! * amp[i]!);
       massed[team] += boost;
       if (withEvents && boost > 0)
         events.push({ kind: "amplify", zone, team, amount: boost });

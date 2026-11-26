@@ -12,7 +12,7 @@ export interface Effect {
   damage?: number;
   /** Fraction of enemy presence removed (0.4 = 40%), measured after deployments. */
   damageFrac?: number;
-  /** Fraction of your own presence added (0.4 = +40%), measured after deployments. */
+  /** Presence your team deploys in the zone this turn arrives this much stronger (0.5 = +50%). */
   amplify?: number;
   /** Removal blocked in this zone this turn. */
   shield?: number;
@@ -37,32 +37,32 @@ export const CARDS = {
   dreadnought: { name: "Dreadnought", cost: 5, type: "unit", add: 11 },
 
   // Marshal: fortification. Shields make strikes whiff.
-  hardpoint: { name: "Hardpoint", cost: 2, type: "unit", add: 3, shield: 2 },
+  hardpoint: { name: "Hardpoint", cost: 2, type: "unit", add: 3, shield: 3 },
   pdgrid: {
     name: "Point-Defense Grid",
     cost: 3,
     type: "support",
-    add: 2,
+    add: 4,
     shield: 6,
   },
   cordon: { name: "Fleet Cordon", cost: 3, type: "unit", add: 2, all: true },
 
   // Corsair: strikes that seize ground and punish predictable reinforcement.
-  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 2, add: 1 },
+  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 1, add: 1 },
   boarding: {
     name: "Boarding Action",
     cost: 2,
     type: "strike",
-    damage: 3,
+    damage: 2,
     add: 1,
     ambush: 2,
   },
-  torpedo: { name: "Torpedo Run", cost: 3, type: "strike", damage: 5, add: 2 },
+  torpedo: { name: "Torpedo Run", cost: 3, type: "strike", damage: 4, add: 2 },
   broadside: {
     name: "Broadside",
     cost: 3,
     type: "strike",
-    damage: 2,
+    damage: 1,
     add: 1,
     all: true,
   },
@@ -72,39 +72,39 @@ export const CARDS = {
   flotilla: { name: "Drone Flotilla", cost: 3, type: "unit", add: 2, all: true },
   armada: { name: "Swarm Armada", cost: 5, type: "unit", add: 4, all: true },
 
-  // Quartermaster: logistics multiply what is already on station.
+  // Quartermaster: logistics multiply whatever the team deploys alongside them.
   resupply: {
     name: "Resupply",
     cost: 2,
     type: "support",
     add: 2,
-    amplify: 0.4,
+    amplify: 0.5,
   },
   overclock: {
     name: "Overclock",
     cost: 3,
     type: "support",
-    add: 3,
-    amplify: 0.4,
+    add: 2,
+    amplify: 1,
   },
   mobilize: {
     name: "General Mobilization",
     cost: 4,
     type: "support",
     add: 1,
-    amplify: 0.4,
+    amplify: 0.5,
     all: true,
   },
 
   // Signalist: electronic warfare strips a share of whatever is massed.
   jam: { name: "Jamming Burst", cost: 2, type: "strike", damage: 3, add: 1 },
-  spoof: { name: "Spoof", cost: 2, type: "strike", damageFrac: 0.4, add: 1 },
+  spoof: { name: "Spoof", cost: 2, type: "strike", damageFrac: 0.3, add: 1 },
   emp: { name: "EMP Lance", cost: 4, type: "strike", damage: 6, add: 2 },
   blackout: {
     name: "Blackout",
     cost: 4,
     type: "strike",
-    damageFrac: 0.4,
+    damageFrac: 0.3,
     add: 1,
     all: true,
   },
@@ -116,10 +116,9 @@ export const CARDS = {
     cost: 3,
     type: "strike",
     damage: 2,
-    add: 1,
     all: true,
   },
-  siege: { name: "Siege Battery", cost: 3, type: "strike", damage: 5, add: 2 },
+  siege: { name: "Siege Battery", cost: 3, type: "strike", damage: 4, add: 2 },
   blockade: {
     name: "Total Blockade",
     cost: 5,
@@ -152,7 +151,7 @@ export const HEROES = {
     name: "The Marshal",
     role: "Fortify and hold",
     description: "Heavy hulls behind shields. Make every strike a wasted one.",
-    ability: { name: "Dig In", add: 3, shield: 3, cooldown: 4 },
+    ability: { name: "Dig In", add: 3, shield: 3, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -172,7 +171,7 @@ export const HEROES = {
     name: "The Corsair",
     role: "Raid and seize",
     description: "Cheap strikes that take ground. Hit where they reinforce.",
-    ability: { name: "Hit and Run", damage: 3, add: 2, ambush: 2, cooldown: 4 },
+    ability: { name: "Hit and Run", damage: 3, add: 1, ambush: 2, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -211,8 +210,8 @@ export const HEROES = {
   quartermaster: {
     name: "The Quartermaster",
     role: "Multiply the line",
-    description: "Bank presence, then multiply it to flip a contested zone.",
-    ability: { name: "Surge", add: 2, amplify: 0.4, cooldown: 3 },
+    description: "Supplies make every hull that lands beside them hit harder.",
+    ability: { name: "Surge", add: 2, amplify: 0.5, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -242,9 +241,9 @@ export const HEROES = {
       "spoof",
       "frigate",
       "frigate",
+      "cruiser",
       "emp",
       "emp",
-      "blackout",
       "blackout",
     ],
   },
@@ -252,7 +251,7 @@ export const HEROES = {
     name: "The Blockader",
     role: "Starve the front",
     description: "Grind a little off every zone, every turn.",
-    ability: { name: "Attrit", damage: 3, cooldown: 3 },
+    ability: { name: "Attrit", damage: 2, all: true, cooldown: 4 },
     deck: [
       "marines",
       "marines",
@@ -340,7 +339,7 @@ export interface Rules {
   fracCap: number;
 }
 export const DEFAULT_RULES: Rules = {
-  targetScore: 20,
+  targetScore: 16,
   maxTurns: 12,
   energyCap: 6,
   startHand: 4,
@@ -369,7 +368,9 @@ export function describe(effect: Effect): string {
     );
   if (effect.add) parts.push(`Establish ${effect.add} presence${where}.`);
   if (effect.amplify)
-    parts.push(`Then raise your presence there by ${pct(effect.amplify)}.`);
+    parts.push(
+      `Presence your team deploys there this turn arrives ${pct(effect.amplify)} stronger.`,
+    );
   if (effect.shield)
     parts.push(`Shield: block ${effect.shield} removal there this turn.`);
   return parts.join(" ");
