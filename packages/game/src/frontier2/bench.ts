@@ -272,6 +272,40 @@ squads.forEach(([a, b], index) => {
   );
 });
 
+// 5. Turn-by-turn traces of chosen pairings, for diagnosing lopsided results.
+function trace(a: Hero, b: Hero, seed: number): void {
+  console.log(`\n-- trace: ${name(a)} (team 0) vs ${name(b)} (team 1), seed ${seed} --`);
+  let game = createGame(
+    [
+      { id: "a", team: 0, hero: a },
+      { id: "b", team: 1, hero: b },
+    ],
+    seed,
+  );
+  const rand = seededRand(seed);
+  while (game.status === "playing") {
+    const hands = game.players.map((p) => p.hand.join(","));
+    const plans = game.players.map((p) => [p.id, reader(game, p.id, rand)] as const);
+    for (const [id, plan] of plans) game = lockAction(game, id, plan);
+    game = resolveTurn(game);
+    const show = (index: number) => {
+      const plan = plans[index]![1];
+      const cards = plan.plays.map((p) => `${p.card}>${p.zone}`).join(" ") || "pass";
+      return `${cards}${plan.ability !== null ? ` +ability>${plan.ability}` : ""}`;
+    };
+    const turn = game.history.at(-1)!;
+    console.log(
+      `T${String(turn.turn).padStart(2)} A[${hands[0]}] plays ${show(0)} | B[${hands[1]}] plays ${show(1)}` +
+        `\n    board ${game.board.map((z) => z.join("-")).join("  ")}  +${turn.points.join("/+")}  score ${game.scores.join("-")}`,
+    );
+  }
+}
+if (process.env.BENCH_TRACE !== "0") {
+  trace("marshal", "swarmwright", 7);
+  trace("quartermaster", "signalist", 7);
+  trace("swarmwright", "blockader", 7);
+}
+
 console.log(`\nBench took ${((Date.now() - started) / 1000).toFixed(1)}s.`);
 if (failures.length) {
   // Report-only until the roster is tuned; set BENCH_ENFORCE=1 to fail the build.
