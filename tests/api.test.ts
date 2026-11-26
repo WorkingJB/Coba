@@ -527,8 +527,14 @@ test("frontier-2 through the API: bot seats, four-seat lobbies, team views", asy
     assert.deepEqual(seat(await read(second.app, friend, id)).plan, plan);
     const theirs = await read(first.app, rival, id);
     assert.equal(seat(theirs).locked, true);
-    assert.equal(JSON.stringify(theirs).includes('"plan"'), false);
-    assert.equal(JSON.stringify(theirs).includes('"hand":'), true);
+    // The only plan the rival can read is their own bot teammate's.
+    const readable = theirs.game.players.filter(
+      (p: { plan?: unknown }) => p.plan,
+    );
+    assert.deepEqual(
+      readable.map((p: { team: number; bot: boolean }) => [p.team, p.bot]),
+      [[1, true]],
+    );
     assert.equal(seat(theirs).hand, undefined);
     // The others run out the clock: the turn resolves once, bots re-plan.
     await pool.query(
