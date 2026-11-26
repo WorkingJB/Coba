@@ -19,15 +19,20 @@ import {
 } from "./engine.js";
 import { reader, seededRand, type Bot } from "./bot.js";
 
-// Hard limits fail the build. Targets are what tuning is aiming for.
-const GATE = { matchup: [30, 70], seat: [45, 55] } as const;
-const TARGET = { matchup: [40, 60] } as const;
+// Balance is judged on average score margin, not bot win rate. Bots play so
+// consistently that a one-point edge in a 16-point game reads as a 95% win
+// rate; people are far noisier. Win rate is still printed for reference.
+// Hard limits can fail the build. Targets are what tuning is aiming for.
+const GATE = { margin: 5, seat: [45, 55] } as const;
+const TARGET = { margin: 2.5 } as const;
 const SCALE = Number(process.env.BENCH_SCALE ?? 1);
 const games = (n: number) => Math.max(2, Math.round((n * SCALE) / 2) * 2);
 
 interface Result {
   winner: Team | "draw";
   turns: number;
+  /** Team 0's final score minus team 1's. */
+  diff: number;
   margin: number;
   /** The winner trailed on points after turn 4. */
   comeback: boolean;
@@ -70,6 +75,7 @@ function play(setup: Setup): Result {
   return {
     winner,
     turns: game.history.length,
+    diff: game.scores[0] - game.scores[1],
     margin: Math.abs(game.scores[0] - game.scores[1]),
     comeback:
       winner !== "draw" && atTurnFour !== 0 && (atTurnFour > 0 ? 0 : 1) !== winner,
@@ -89,6 +95,7 @@ interface Tally {
   leadChanges: number;
   blowouts: number;
   onPoints: number;
+  lead: number; // summed score margin for the first-listed side
 }
 const emptyTally = (): Tally => ({
   games: 0,
@@ -101,6 +108,7 @@ const emptyTally = (): Tally => ({
   leadChanges: 0,
   blowouts: 0,
   onPoints: 0,
+  lead: 0,
 });
 function merge(into: Tally, from: Tally): void {
   for (const key of Object.keys(into) as (keyof Tally)[]) into[key] += from[key];
@@ -124,6 +132,7 @@ function series(
     tally.games++;
     tally.turns += result.turns;
     tally.leadChanges += result.leadChanges;
+    tally.lead += aFirst ? result.diff : -result.diff;
     if (result.margin >= 8) tally.blowouts++;
     if (result.comeback) tally.comebacks++;
     if (result.onPoints) tally.onPoints++;
@@ -150,9 +159,10 @@ const started = Date.now();
 // 1. The matrix that matters: every pairing, neutral theater, reading bots.
 console.log("== 1v1 matchups · Kestrel Reach · reader bots ==");
 const overall = emptyTally();
-const byHero = new Map<Hero, { wins: number; games: number }>(
-  HERO_IDS.map((h) => [h, { wins: 0, games: 0 }]),
+const byHero = new Map<Hero, { wins: number; lead: number; games: number }>(
+  HERO_IDS.map((h) => [h, { wins: 0, lead: 0, games: 0 }]),
 );
+const signed = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(1)}`.padStart(5);
 let outsideTarget = 0;
 pairs.forEach(([a, b], index) => {
   const tally = series([a], [b], games(160), 10_000 + index * 1000, {
@@ -160,25 +170,31 @@ pairs.forEach(([a, b], index) => {
   });
   merge(overall, tally);
   const share = rate(tally);
+  const lead = tally.lead / tally.games;
   byHero.get(a)!.wins += share;
+  byHero.get(a)!.lead += lead;
   byHero.get(a)!.games++;
   byHero.get(b)!.wins += 100 - share;
+  byHero.get(b)!.lead -= lead;
   byHero.get(b)!.games++;
   const flag =
-    share < GATE.matchup[0] || share > GATE.matchup[1]
+    Math.abs(lead) > GATE.margin
       ? "  FAIL"
-      : share < TARGET.matchup[0] || share > TARGET.matchup[1]
+      : Math.abs(lead) > TARGET.margin
         ? "  off target"
         : "";
   if (flag.includes("FAIL"))
-    failures.push(`${name(a)} vs ${name(b)}: ${share.toFixed(1)}%`);
+    failures.push(`${name(a)} vs ${name(b)}: margin ${signed(lead).trim()}`);
   if (flag) outsideTarget++;
   console.log(
-    `${`${name(a)} vs ${name(b)}`.padEnd(30)} ${pct(share)}  draws ${String(tally.draws).padStart(3)}  avg ${(tally.turns / tally.games).toFixed(1)} turns${flag}`,
+    `${`${name(a)} vs ${name(b)}`.padEnd(30)} margin ${signed(lead)}  bot win ${pct(share)}  avg ${(tally.turns / tally.games).toFixed(1)} turns${flag}`,
   );
 });
-console.log("\n== Commander strength (mean share across matchups) ==");
-for (const [h, s] of byHero) console.log(`${name(h).padEnd(16)} ${pct(s.wins / s.games)}`);
+console.log("\n== Commander strength (mean across matchups) ==");
+for (const [h, s] of byHero)
+  console.log(
+    `${name(h).padEnd(16)} margin ${signed(s.lead / s.games)}  bot win ${pct(s.wins / s.games)}`,
+  );
 const seatShare = (overall.seatZero / Math.max(1, overall.decisive)) * 100;
 console.log(
   `\nSeat check: team 0 won ${seatShare.toFixed(1)}% of decisive games. ` +
@@ -186,7 +202,7 @@ console.log(
     `(${((overall.onPoints / overall.games) * 100).toFixed(0)}% reach the target score), ` +
     `comebacks ${((overall.comebacks / overall.games) * 100).toFixed(1)}%, ` +
     `blowouts ${((overall.blowouts / overall.games) * 100).toFixed(1)}%, ` +
-    `${outsideTarget}/${pairs.length} matchups outside ${TARGET.matchup.join("–")}.`,
+    `${outsideTarget}/${pairs.length} matchups beyond a ${TARGET.margin}-point average margin.`,
 );
 if (seatShare < GATE.seat[0] || seatShare > GATE.seat[1])
   failures.push(`Seat bias: team 0 wins ${seatShare.toFixed(1)}%`);
@@ -197,9 +213,7 @@ const variants: [string, Partial<Rules>][] = [
   ["permanent, no secure", { retain: 1, secureAfter: 0 }],
   ["permanent + secure", { retain: 1, secureAfter: 3 }],
   ["keep 1/2 + secure", { retain: 0.5, secureAfter: 3 }],
-  ["keep 1/2, no secure", { retain: 0.5, secureAfter: 0 }],
-  ["keep 1/4, no secure", { retain: 0.25, secureAfter: 0 }],
-  ["nothing carries", { retain: 0, secureAfter: 0 }],
+  ["secure + focus zone", { retain: 1, secureAfter: 3, focusBonus: 1 }],
 ];
 for (const [label, rules] of variants) {
   const total = emptyTally();
@@ -211,7 +225,7 @@ for (const [label, rules] of variants) {
       rules,
     });
     merge(total, tally);
-    const off = Math.abs(rate(tally) - 50);
+    const off = Math.abs(tally.lead / tally.games);
     spread += off;
     worst = Math.max(worst, off);
   });
@@ -220,28 +234,27 @@ for (const [label, rules] of variants) {
       `comebacks ${pct((total.comebacks / total.games) * 100)}  ` +
       `lead changes ${(total.leadChanges / total.games).toFixed(2)}/game  ` +
       `blowouts ${pct((total.blowouts / total.games) * 100)}  ` +
-      `matchup skew mean ${(spread / pairs.length).toFixed(1)} max ${worst.toFixed(1)}`,
+      `avg margin mean ${(spread / pairs.length).toFixed(1)} max ${worst.toFixed(1)}`,
   );
 }
 
 // 3. Theaters should bend matchups, not decide them.
-console.log("\n== Theaters · reader bots · most lopsided pairing ==");
+console.log("\n== Theaters · reader bots · widest average margin ==");
 for (const theater of THEATER_IDS) {
-  let worst = { label: "", share: 50 };
+  let worst = { label: "", lead: 0 };
   let spread = 0;
   pairs.forEach(([a, b], index) => {
-    const share = rate(
-      series([a], [b], games(40), 90_000 + index * 1000, {
-        bot: reader,
-        theater,
-      }),
-    );
-    spread += Math.abs(share - 50);
-    if (Math.abs(share - 50) > Math.abs(worst.share - 50))
-      worst = { label: `${name(a)} vs ${name(b)}`, share };
+    const tally = series([a], [b], games(40), 90_000 + index * 1000, {
+      bot: reader,
+      theater,
+    });
+    const lead = tally.lead / tally.games;
+    spread += Math.abs(lead);
+    if (Math.abs(lead) >= Math.abs(worst.lead))
+      worst = { label: `${name(a)} vs ${name(b)}`, lead };
   });
   console.log(
-    `${THEATERS[theater].name.padEnd(18)} mean skew ${(spread / pairs.length).toFixed(1)}  worst ${worst.label} ${pct(worst.share)}`,
+    `${THEATERS[theater].name.padEnd(18)} avg margin mean ${(spread / pairs.length).toFixed(1)}  worst ${worst.label} ${signed(worst.lead).trim()}`,
   );
 }
 
@@ -268,7 +281,7 @@ const squads: [Hero[], Hero[]][] = [
 squads.forEach(([a, b], index) => {
   const tally = series(a, b, games(40), 130_000 + index * 1000, { bot: reader });
   console.log(
-    `${`${a.map(name).join("+")} vs ${b.map(name).join("+")}`.padEnd(48)} ${pct(rate(tally))}  avg ${(tally.turns / tally.games).toFixed(1)} turns`,
+    `${`${a.map(name).join("+")} vs ${b.map(name).join("+")}`.padEnd(48)} margin ${signed(tally.lead / tally.games)}  bot win ${pct(rate(tally))}  avg ${(tally.turns / tally.games).toFixed(1)} turns`,
   );
 });
 
@@ -300,7 +313,7 @@ function trace(a: Hero, b: Hero, seed: number): void {
     );
   }
 }
-if (process.env.BENCH_TRACE !== "0") {
+if (process.env.BENCH_TRACE === "1") {
   trace("marshal", "swarmwright", 7);
   trace("quartermaster", "signalist", 7);
   trace("swarmwright", "blockader", 7);
@@ -311,7 +324,7 @@ if (failures.length) {
   // Report-only until the roster is tuned; set BENCH_ENFORCE=1 to fail the build.
   const enforce = process.env.BENCH_ENFORCE === "1";
   console.log(
-    `\nBalance gate NOT met (${GATE.matchup.join("–")}% per matchup)${enforce ? "" : " — report only"}:`,
+    `\nBalance gate NOT met (average margin within ${GATE.margin} points)${enforce ? "" : " — report only"}:`,
   );
   for (const failure of failures) console.log(`  ${failure}`);
   if (enforce) process.exitCode = 1;

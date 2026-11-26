@@ -48,7 +48,7 @@ export const CARDS = {
   cordon: { name: "Fleet Cordon", cost: 3, type: "unit", add: 2, all: true },
 
   // Corsair: strikes that seize ground and punish predictable reinforcement.
-  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 1, add: 1 },
+  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 2, add: 1 },
   boarding: {
     name: "Boarding Action",
     cost: 2,
@@ -57,7 +57,7 @@ export const CARDS = {
     add: 1,
     ambush: 2,
   },
-  torpedo: { name: "Torpedo Run", cost: 3, type: "strike", damage: 4, add: 2 },
+  torpedo: { name: "Torpedo Run", cost: 3, type: "strike", damage: 5, add: 2 },
   broadside: {
     name: "Broadside",
     cost: 3,
@@ -70,7 +70,7 @@ export const CARDS = {
   // Swarmwright: thin presence everywhere.
   drones: { name: "Drone Cloud", cost: 2, type: "unit", add: 1, all: true },
   flotilla: { name: "Drone Flotilla", cost: 3, type: "unit", add: 2, all: true },
-  armada: { name: "Swarm Armada", cost: 5, type: "unit", add: 4, all: true },
+  armada: { name: "Swarm Armada", cost: 5, type: "unit", add: 3, all: true },
 
   // Quartermaster: logistics multiply whatever the team deploys alongside them.
   resupply: {
@@ -99,13 +99,12 @@ export const CARDS = {
   // Signalist: electronic warfare strips a share of whatever is massed.
   jam: { name: "Jamming Burst", cost: 2, type: "strike", damage: 3, add: 1 },
   spoof: { name: "Spoof", cost: 2, type: "strike", damageFrac: 0.3, add: 1 },
-  emp: { name: "EMP Lance", cost: 4, type: "strike", damage: 6, add: 2 },
+  emp: { name: "EMP Lance", cost: 4, type: "strike", damage: 5, add: 2 },
   blackout: {
     name: "Blackout",
     cost: 4,
     type: "strike",
     damageFrac: 0.3,
-    add: 1,
     all: true,
   },
 
@@ -118,13 +117,13 @@ export const CARDS = {
     damage: 2,
     all: true,
   },
-  siege: { name: "Siege Battery", cost: 3, type: "strike", damage: 4, add: 2 },
+  siege: { name: "Siege Battery", cost: 3, type: "strike", damage: 5, add: 2 },
   blockade: {
     name: "Total Blockade",
     cost: 5,
     type: "strike",
     damage: 3,
-    add: 1,
+    add: 2,
     all: true,
   },
 } satisfies Record<string, Card>;
@@ -171,7 +170,7 @@ export const HEROES = {
     name: "The Corsair",
     role: "Raid and seize",
     description: "Cheap strikes that take ground. Hit where they reinforce.",
-    ability: { name: "Hit and Run", damage: 3, add: 1, ambush: 2, cooldown: 3 },
+    ability: { name: "Hit and Run", damage: 3, add: 2, ambush: 2, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -191,7 +190,7 @@ export const HEROES = {
     name: "The Swarmwright",
     role: "Be everywhere",
     description: "Drone swarms spread thin across the whole front.",
-    ability: { name: "Fabricate", add: 4, cooldown: 3 },
+    ability: { name: "Fabricate", add: 3, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -231,7 +230,7 @@ export const HEROES = {
     name: "The Signalist",
     role: "Unmake their mass",
     description: "The bigger the fleet, the more a blackout takes from it.",
-    ability: { name: "Scramble", damage: 3, add: 1, cooldown: 3 },
+    ability: { name: "Scramble", damage: 2, add: 1, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -251,12 +250,12 @@ export const HEROES = {
     name: "The Blockader",
     role: "Starve the front",
     description: "Grind a little off every zone, every turn.",
-    ability: { name: "Attrit", damage: 2, all: true, cooldown: 4 },
+    ability: { name: "Attrit", damage: 2, all: true, cooldown: 3 },
     deck: [
       "marines",
       "marines",
       "embargo",
-      "embargo",
+      "gunship",
       "interdict",
       "interdict",
       "siege",
