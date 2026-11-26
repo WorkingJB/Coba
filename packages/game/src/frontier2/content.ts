@@ -337,6 +337,11 @@ export interface Rules {
   focusBonus: number;
   /** Ceiling on the combined fraction one team can strip from a zone in a turn. */
   fracCap: number;
+  /**
+   * Share of each stack that survives into the next turn, rounded up
+   * (1 = presence is permanent, 0.5 = every stack halves after scoring).
+   */
+  retain: number;
 }
 export const DEFAULT_RULES: Rules = {
   targetScore: 16,
@@ -350,6 +355,7 @@ export const DEFAULT_RULES: Rules = {
   secureBonus: 2,
   focusBonus: 0,
   fracCap: 0.75,
+  retain: 1,
 };
 export const TURN_MS = 45_000;
 

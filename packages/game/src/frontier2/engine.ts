@@ -4,7 +4,8 @@
 //   1. deploy   — all presence lands
 //   2. amplify  — each team's deployments this turn are scaled
 //   3. strike   — removal (less shields) is measured against that total
-//   4. control  — zone leads score, streaks advance, held zones are secured
+//   4. control  — zone leads score, streaks advance, held zones are secured,
+//                 then surviving presence thins out by the attrition rule
 import {
   CARD_IDS,
   CARDS,
@@ -410,6 +411,11 @@ export function simulate(
       }
     } else if (withEvents) {
       events.push({ kind: "control", zone, team: null, points: 0, streak: 0 });
+    }
+    if (rules.retain < 1) {
+      // Attrition: what is left after scoring thins out before the next turn.
+      after[0] = Math.ceil(after[0] * rules.retain);
+      after[1] = Math.ceil(after[1] * rules.retain);
     }
     board.push(after);
     holds.push(hold);
