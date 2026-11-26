@@ -24,6 +24,15 @@ Sequence by evidence and exit gates, not a promised launch date. Approximate mon
 
 Payments, gacha, trading, player-generated competitive cards, chat, live AI opponents, mobile store release, active-active databases, and Kubernetes. Revisit only when product requirements justify their operating cost.
 
+## Game direction increments
+
+Decided 2026-11-26: keep this foundation and port the POC's game back onto it; build the visual slice for 2v2; art direction is an illustrated battlefield with a hard-science-fiction look.
+
+1. **Done on `feat/frontier-2-core`** — frontier-2 rules, six commanders, reference bots, CI bench (engine only).
+2. Ruleset dispatcher, four-seat lobbies with bot-filled seats, frontier-2 commands and views through the API.
+3. Battle screen rebuilt as a fixed-viewport game board: drag cards to zones, staged resolution from the event list, sound. No new art required.
+4. Art slice: one theater, two commanders and their cards fully illustrated, to settle the look before producing the rest.
+
 ## First next increment
 
 Select a staging cost envelope, provision a new isolated database and two app replicas, deploy the verified image, then play the same match while terminating one replica. Capture latency and deadline lag, restore the database to a fresh instance, and record evidence. Keep the old POC online until the new staging build has earned replacement.

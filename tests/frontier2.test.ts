@@ -274,7 +274,7 @@ test("losing the lead restarts the hold streak for the new leader", () => {
   });
   game = both(game, pass, pass);
   assert.equal(game.holds[1]!.streak, 1);
-  // Sabotage removes 2 and seizes 1, Marines add 2: 1 against 3.
+  // Sabotage removes 1 and seizes 1, Marines add 2: 2 against 3.
   game = both(game, pass, {
     plays: [
       { card: "sabotage", zone: 1 },
@@ -282,7 +282,7 @@ test("losing the lead restarts the hold streak for the new leader", () => {
     ],
     ability: null,
   });
-  assert.deepEqual(game.board[1], [1, 3]);
+  assert.deepEqual(game.board[1], [2, 3]);
   assert.deepEqual(game.holds[1], { team: 1, streak: 1 });
 });
 

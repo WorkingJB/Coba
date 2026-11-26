@@ -48,7 +48,7 @@ export const CARDS = {
   cordon: { name: "Fleet Cordon", cost: 3, type: "unit", add: 2, all: true },
 
   // Corsair: strikes that seize ground and punish predictable reinforcement.
-  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 2, add: 1 },
+  sabotage: { name: "Sabotage", cost: 1, type: "strike", damage: 1, add: 1 },
   boarding: {
     name: "Boarding Action",
     cost: 2,
@@ -70,7 +70,7 @@ export const CARDS = {
   // Swarmwright: thin presence everywhere.
   drones: { name: "Drone Cloud", cost: 2, type: "unit", add: 1, all: true },
   flotilla: { name: "Drone Flotilla", cost: 3, type: "unit", add: 2, all: true },
-  armada: { name: "Swarm Armada", cost: 5, type: "unit", add: 3, all: true },
+  armada: { name: "Swarm Armada", cost: 5, type: "unit", add: 4, all: true },
 
   // Quartermaster: logistics multiply whatever the team deploys alongside them.
   resupply: {
@@ -123,7 +123,7 @@ export const CARDS = {
     cost: 5,
     type: "strike",
     damage: 3,
-    add: 2,
+    add: 1,
     all: true,
   },
 } satisfies Record<string, Card>;
@@ -230,7 +230,7 @@ export const HEROES = {
     name: "The Signalist",
     role: "Unmake their mass",
     description: "The bigger the fleet, the more a blackout takes from it.",
-    ability: { name: "Scramble", damage: 2, add: 1, cooldown: 3 },
+    ability: { name: "Scramble", damage: 3, add: 1, cooldown: 3 },
     deck: [
       "marines",
       "marines",
@@ -250,7 +250,7 @@ export const HEROES = {
     name: "The Blockader",
     role: "Starve the front",
     description: "Grind a little off every zone, every turn.",
-    ability: { name: "Attrit", damage: 2, all: true, cooldown: 3 },
+    ability: { name: "Attrit", damage: 2, all: true, cooldown: 4 },
     deck: [
       "marines",
       "marines",
