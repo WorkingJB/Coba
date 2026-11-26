@@ -118,7 +118,9 @@ function App() {
     const timer = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(timer);
   }, []);
-  const game = match?.game;
+  // This screen plays frontier-1. frontier-2 is served by the API and gets
+  // its own battle screen in the next increment.
+  const game = match?.ruleset === "frontier-1" ? match.game : null;
   const me = game?.players.find((p) => p.id === match?.you);
   useEffect(() => {
     if (!game) return;

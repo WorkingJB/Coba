@@ -39,6 +39,8 @@ export interface Seat {
   id: string;
   team: Team;
   hero: Hero;
+  /** A seat played by a reference bot. Its plans are derived from the state. */
+  bot?: boolean;
 }
 export interface Player extends Seat {
   hand: CardId[];
@@ -222,6 +224,7 @@ export function createGame(
       id: seat.id,
       team: seat.team,
       hero: seat.hero,
+      ...(seat.bot ? { bot: true } : {}),
       hand: deck.splice(0, size),
       draw: deck,
       discard: [],
@@ -466,9 +469,12 @@ export function resolveTurn(input: Game, allowTimeout = false): Game {
   game.history.push(reveal);
   game.pending = {};
 
-  const abandoned = TEAMS.filter((team) =>
-    game.players.filter((p) => p.team === team).every((p) => p.missed >= 3),
-  );
+  // A team forfeits once every person on it has missed three turns running.
+  // Bots never miss, so they neither forfeit nor keep an empty team alive.
+  const abandoned = TEAMS.filter((team) => {
+    const people = game.players.filter((p) => p.team === team && !p.bot);
+    return people.length > 0 && people.every((p) => p.missed >= 3);
+  });
   const top = Math.max(game.scores[0], game.scores[1]);
   if (abandoned.length) {
     game.status = "finished";
@@ -502,8 +508,8 @@ export function resolveTurn(input: Game, allowTimeout = false): Game {
 }
 
 export function playerView(game: Game, playerId: string) {
-  if (!game.players.some((p) => p.id === playerId))
-    throw new RuleError("You are not in this match.");
+  const viewer = game.players.find((p) => p.id === playerId);
+  if (!viewer) throw new RuleError("You are not in this match.");
   // Allowlist projection: never serialize internal state and then redact it.
   return {
     ruleset: game.ruleset,
@@ -526,8 +532,13 @@ export function playerView(game: Game, playerId: string) {
       hero: p.hero,
       handCount: p.hand.length,
       abilityReadyTurn: p.abilityReadyTurn,
+      bot: !!p.bot,
       locked: !!game.pending[p.id],
       ...(p.id === playerId ? { hand: [...p.hand] } : {}),
+      // A locked plan is shown to its own team, never to the other one.
+      ...(p.team === viewer.team && game.pending[p.id]
+        ? { plan: structuredClone(game.pending[p.id]!) }
+        : {}),
     })),
   };
 }

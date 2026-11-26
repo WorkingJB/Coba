@@ -12,21 +12,16 @@ import rateLimit from "@fastify/rate-limit";
 import pg from "pg";
 import { z, ZodError } from "zod";
 import { MatchStore, StoreError } from "./store.js";
-const hero = z.enum(["warden", "shade"]);
+import { RULESET_IDS } from "./rulesets.js";
+// Heroes and actions differ by ruleset; the store checks them against the match.
+const hero = z.string().min(1).max(32);
+const team = z.union([z.literal(0), z.literal(1)]);
 const uuid = z.string().uuid();
 const command = z
   .object({
     commandId: uuid,
     turn: z.number().int().min(1).max(16),
-    action: z
-      .object({
-        card: z
-          .enum(["scout", "guard", "rampart", "bastion", "raid", "breach"])
-          .nullable(),
-        zone: z.union([z.literal(0), z.literal(1), z.literal(2)]),
-        ability: z.boolean(),
-      })
-      .strict(),
+    action: z.unknown(),
   })
   .strict();
 const hash = (value: string) =>
@@ -148,22 +143,44 @@ export async function buildApp(options: AppOptions) {
     },
   );
   app.post("/api/matches", async (request) => {
-    const input = z.object({ id: uuid, hero }).strict().parse(request.body);
+    const { id, hero: chosen, ...options } = z
+      .object({
+        id: uuid,
+        hero,
+        ruleset: z.enum(RULESET_IDS).default("frontier-1"),
+        size: z.union([z.literal(2), z.literal(4)]).default(2),
+        bots: z.boolean().default(false),
+      })
+      .strict()
+      .parse(request.body);
     return store.create(
-      input.id,
+      id,
       await actor(request.cookies.coba_session),
-      input.hero,
+      chosen,
+      options,
     );
   });
   app.post("/api/join", async (request) => {
     const input = z
-      .object({ code: z.string().regex(/^[A-F0-9]{10}$/), hero })
+      .object({
+        code: z.string().regex(/^[A-F0-9]{10}$/),
+        hero,
+        team: team.optional(),
+      })
       .strict()
       .parse(request.body);
     return store.join(
       input.code,
       await actor(request.cookies.coba_session),
       input.hero,
+      input.team,
+    );
+  });
+  app.post("/api/matches/:id/start", async (request) => {
+    z.object({}).strict().parse(request.body ?? {});
+    return store.start(
+      z.object({ id: uuid }).parse(request.params).id,
+      await actor(request.cookies.coba_session),
     );
   });
   app.get("/api/matches/:id", async (request) =>

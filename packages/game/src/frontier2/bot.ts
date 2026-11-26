@@ -7,6 +7,7 @@
 import { card, type CardId } from "./content.js";
 import {
   energyFor,
+  lockAction,
   simulate,
   type Action,
   type Game,
@@ -236,3 +237,19 @@ export const reader: Bot = (game, playerId, rand) => {
   }
   return mine[0]!.action;
 };
+
+/**
+ * Lock a plan for every bot seat that has not planned this turn. The bots'
+ * randomness is seeded from the game state, so the result is a pure function
+ * of the game: any replica computes the same plans, and a journal replays.
+ */
+export function lockBots(input: Game, bot: Bot = reader): Game {
+  if (input.status !== "playing") return input;
+  let game = input;
+  input.players.forEach((player, index) => {
+    if (!player.bot || input.pending[player.id]) return;
+    const seed = input.rng ^ Math.imul(input.turn * 8 + index + 1, 0x9e3779b1);
+    game = lockAction(game, player.id, bot(input, player.id, seededRand(seed)));
+  });
+  return game;
+}
