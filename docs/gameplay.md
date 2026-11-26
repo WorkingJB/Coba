@@ -37,7 +37,7 @@ What the bench has and has not shown (bots, so direction only):
 - Seat order is fair: team 0 wins about half of decisive games.
 - Matches run about ten turns and nearly all end on the score target.
 - **Bot win rate badly overstates imbalance.** Bots are so consistent that a one-point average edge in a 16-point game shows up as a 95% win rate. The bench therefore reports average score margin and treats win rate as a footnote. The POC's 90% matchups deserve the same caution.
-- Carry-over is not what makes matchups lopsided. Halving presence every turn narrowed margins slightly but cut comebacks and lead changes by a third, so presence stays permanent. A rotating bonus zone shortened games and also reduced comebacks, so it stays off. Both remain as rule switches.
+- Carry-over is not what makes matchups lopsided. Halving presence every turn halved blowouts but also cut comebacks and lead changes by about a quarter, so presence stays permanent for now. A rotating bonus zone shortened games and also reduced comebacks, so it stays off. Both remain as rule switches.
 - The roster is **not balanced yet**. The margin gate (five points) is report-only in CI; see the latest bench log for the current table. Commander numbers should next move on human play, not on more bot passes.
 
 ## Repeated loop
